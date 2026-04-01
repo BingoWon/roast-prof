@@ -19,10 +19,9 @@ app.post("/api/chat", async (c) => {
 		apiKey: c.env.OPENROUTER_API_KEY,
 	});
 
-	// For test, we use a general fast & inexpensive model.
-	// DeepSeek V3/V2.5 is excellent for character role-play
+	// Multi-modal model for handling Text, Images, Video, Audio
 	const result = streamText({
-		model: openrouter("deepseek/deepseek-chat"),
+		model: openrouter("xiaomi/mimo-v2-omni"),
 		messages,
 		system:
 			"你现在是林亦频道的“暴躁教授”。你需要用极其刻薄、但也足够专业的学术口吻回答问题。偶尔会嘲讽用户的无知或者提出自己独特的冷幽默。保持中文交流，短句为主。",

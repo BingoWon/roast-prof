@@ -1,27 +1,24 @@
 import { Chat } from "./Chat";
 
-export default function App() {
+function App() {
 	return (
-		<div className="h-screen w-full bg-zinc-950 text-zinc-100 flex flex-col font-sans">
-			{/* Header Strip */}
-			<header className="px-6 py-4 border-b border-zinc-800 flex items-center justify-between z-10 bg-zinc-900/50 backdrop-blur-md shrink-0">
-				<div className="flex items-center gap-3">
-					<div className="w-8 h-8 rounded-lg bg-gradient-to-br from-red-500 to-orange-500 flex items-center justify-center text-xl shadow-lg shadow-orange-500/20">
-						😡
-					</div>
-					<h1 className="text-xl font-bold bg-gradient-to-r from-amber-300 via-orange-400 to-red-500 bg-clip-text text-transparent">
-						Roast Prof
+		<main className="h-screen w-screen bg-[#050505] text-zinc-100 overflow-hidden font-sans selection:bg-orange-500/30">
+			<nav className="fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-6 py-4 backdrop-blur-md bg-black/40 border-b border-white/5">
+				<div className="flex items-center gap-3 relative">
+					<div className="absolute inset-0 bg-red-500 blur-xl opacity-20 pointer-events-none rounded-full" />
+					<h1 className="text-xl font-bold tracking-tighter bg-gradient-to-br from-white to-zinc-500 bg-clip-text text-transparent">
+						Roast Prof AI
 					</h1>
+					<span className="px-2 py-0.5 mt-0.5 rounded-full bg-red-500/10 border border-red-500/20 text-[10px] font-bold text-red-400 uppercase tracking-wider">
+						Beta
+					</span>
 				</div>
-				<div className="px-3 py-1 rounded-full bg-zinc-800 border border-zinc-700 text-xs text-zinc-400">
-					Model: DeepSeek V3 (OpenRouter)
-				</div>
-			</header>
-
-			{/* Main Workspace */}
-			<main className="flex-1 overflow-hidden">
+			</nav>
+			<div className="h-full pt-16">
 				<Chat />
-			</main>
-		</div>
+			</div>
+		</main>
 	);
 }
+
+export default App;
