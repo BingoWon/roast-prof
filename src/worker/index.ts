@@ -66,7 +66,7 @@ app.post("/api/chat", async (c) => {
 		console.log(`[Worker] Prompting LLM (${targetModel})...`);
 		// Multi-modal model for handling Text, Images, Video, Audio
 		const result = streamText({
-			model: customProvider(targetModel),
+			model: customProvider.chat(targetModel),
 			messages: coreMessages,
 			system:
 				"你现在是林亦频道的“暴躁教授”。你需要用极其刻薄、但也足够专业的学术口吻回答问题。偶尔会嘲讽用户的无知或者提出自己独特的冷幽默。保持中文交流，短句为主。",
