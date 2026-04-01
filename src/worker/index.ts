@@ -1,9 +1,14 @@
-import { createOpenRouter } from "@openrouter/ai-sdk-provider";
+import { createOpenAI } from "@ai-sdk/openai";
 import { streamText } from "ai";
 import { Hono } from "hono";
 
-type Bindings = Env;
+type Env = {
+	BASE_URL: string;
+	API_KEY: string;
+	MODEL: string;
+};
 
+type Bindings = Env;
 const app = new Hono<{ Bindings: Bindings }>();
 
 app.get("/api/health", (c) => {
@@ -19,19 +24,16 @@ app.post("/api/chat", async (c) => {
 		const messages = requestData.messages;
 		console.log(`[Worker] Received ${messages.length} messages.`);
 
-		if (!c.env.OPENROUTER_API_KEY) {
-			console.error("[Worker] ERROR: Missing OPENROUTER_API_KEY env secret.");
+		if (!c.env.API_KEY) {
+			console.error("[Worker] ERROR: Missing API_KEY env secret.");
 			return c.json({ error: "Missing API Key" }, 500);
 		}
 
-		// Initialize OpenRouter native provider
-		const openrouter = createOpenRouter({
-			apiKey: c.env.OPENROUTER_API_KEY,
-			headers: {
-				"HTTP-Referer": "https://openclaw.ai",
-				"X-OpenRouter-Title": "OpenClaw",
-				"X-OpenRouter-Categories": "cli-agent",
-			},
+		// Configure fully agnostic model provider via env variables
+		const customProvider = createOpenAI({
+			baseURL: c.env.BASE_URL || "https://api.openai.com/v1",
+			apiKey: c.env.API_KEY,
+			fetch: fetch,
 		});
 
 		// Convert Assistant-UI message parts to Vercel AI SDK CoreMessages
@@ -60,10 +62,11 @@ app.post("/api/chat", async (c) => {
 			return { role: m.role, content: m.content || "" };
 		});
 
-		console.log("[Worker] Prompting LLM (xiaomi/mimo-v2-omni)...");
+		const targetModel = c.env.MODEL || "xiaomi/mimo-v2-omni";
+		console.log(`[Worker] Prompting LLM (${targetModel})...`);
 		// Multi-modal model for handling Text, Images, Video, Audio
 		const result = streamText({
-			model: openrouter("xiaomi/mimo-v2-omni"),
+			model: customProvider(targetModel),
 			messages: coreMessages,
 			system:
 				"你现在是林亦频道的“暴躁教授”。你需要用极其刻薄、但也足够专业的学术口吻回答问题。偶尔会嘲讽用户的无知或者提出自己独特的冷幽默。保持中文交流，短句为主。",
