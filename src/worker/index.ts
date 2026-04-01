@@ -2,90 +2,87 @@ import { createOpenAI } from "@ai-sdk/openai";
 import { streamText } from "ai";
 import { Hono } from "hono";
 
-type Env = {
-	BASE_URL: string;
-	API_KEY: string;
-	MODEL: string;
+// Use the globally generated Env from worker-configuration.d.ts (via `pnpm cf-typegen`)
+const app = new Hono<{ Bindings: Env }>();
+
+// ── Types for Assistant-UI message wire format ────────────────────────────────
+
+type MessagePart =
+	| { type: "text"; text: string }
+	| { type: "image"; image?: string; url?: string }
+	| { type: "image_url"; image_url?: { url: string }; url?: string }
+	| { type: "file"; mediaType?: string; url?: string };
+
+type UIMessage = {
+	role: string;
+	parts?: MessagePart[];
+	content?: string;
 };
 
-type Bindings = Env;
-const app = new Hono<{ Bindings: Bindings }>();
+/** Convert Assistant-UI UIMessage parts to Vercel AI SDK CoreMessage content. */
+function toCoreParts(parts: MessagePart[]) {
+	return parts
+		.map((p) => {
+			if (p.type === "text") return { type: "text" as const, text: p.text };
+			if (p.type === "image")
+				return { type: "image" as const, image: p.image ?? p.url ?? "" };
+			if (p.type === "image_url")
+				return {
+					type: "image" as const,
+					image: p.image_url?.url ?? p.url ?? "",
+				};
+			if (p.type === "file")
+				return {
+					type: "file" as const,
+					mimeType: p.mediaType ?? "application/octet-stream",
+					data: p.url ?? "",
+				};
+			return null;
+		})
+		.filter(Boolean);
+}
 
-app.get("/api/health", (c) => {
-	return c.json({ status: "ok", name: "roast-prof" });
-});
+// ── Routes ────────────────────────────────────────────────────────────────────
+
+app.get("/api/health", (c) => c.json({ status: "ok", name: "roast-prof" }));
 
 app.post("/api/chat", async (c) => {
-	console.log(
-		"[Worker] ----------- POST /api/chat Request Intercepted -----------",
-	);
 	try {
-		const requestData = await c.req.json();
-		const messages = requestData.messages;
-		console.log(`[Worker] Received ${messages.length} messages.`);
+		const { messages } = await c.req.json<{ messages: UIMessage[] }>();
 
 		if (!c.env.API_KEY) {
-			console.error("[Worker] ERROR: Missing API_KEY env secret.");
-			return c.json({ error: "Missing API Key" }, 500);
+			return c.json({ error: "Missing API_KEY secret" }, 500);
 		}
 
-		// Configure fully agnostic model provider via env variables
-		const customProvider = createOpenAI({
-			baseURL: c.env.BASE_URL || "https://api.openai.com/v1",
+		const provider = createOpenAI({
+			baseURL: c.env.BASE_URL ?? "https://api.openai.com/v1",
 			apiKey: c.env.API_KEY,
-			fetch: fetch,
+			fetch,
 		});
 
-		// Convert Assistant-UI message parts to Vercel AI SDK CoreMessages
-		const coreMessages = messages.map((m: any) => {
-			if (m.parts) {
-				return {
-					role: m.role,
-					content: m.parts
-						.map((p: any) => {
-							if (p.type === "text") return { type: "text", text: p.text };
-							if (p.type === "image")
-								return { type: "image", image: p.image || p.url };
-							if (p.type === "image_url")
-								return { type: "image", image: p.image_url?.url || p.url };
-							if (p.type === "file")
-								return {
-									type: "file",
-									mimeType: p.mediaType || "application/octet-stream",
-									data: p.url,
-								};
-							return null;
-						})
-						.filter(Boolean),
-				};
-			}
-			return { role: m.role, content: m.content || "" };
-		});
+		const coreMessages = messages.map((m) => ({
+			role: m.role,
+			content: m.parts?.length
+				? toCoreParts(m.parts as MessagePart[])
+				: (m.content ?? ""),
+		}));
 
-		const targetModel = c.env.MODEL || "xiaomi/mimo-v2-omni";
-		console.log(`[Worker] Prompting LLM (${targetModel})...`);
-		// Multi-modal model for handling Text, Images, Video, Audio
+		const model = c.env.MODEL ?? "xiaomi/mimo-v2-omni";
+		console.log(`[Worker] ${messages.length} msgs → ${model}`);
+
 		const result = streamText({
-			model: customProvider.chat(targetModel),
-			messages: coreMessages,
+			model: provider.chat(model),
+			// biome-ignore lint/suspicious/noExplicitAny: CoreMessage union can't express mixed role+content at compile time
+			messages: coreMessages as any,
 			system:
-				"你现在是林亦频道的“暴躁教授”。你需要用极其刻薄、但也足够专业的学术口吻回答问题。偶尔会嘲讽用户的无知或者提出自己独特的冷幽默。保持中文交流，短句为主。",
+				"你现在是林亦频道的「暴躁教授」。用极其刻薄、但也足够专业的学术口吻回答问题。偶尔嘲讽用户的无知，偶尔冷幽默。保持中文，短句为主。",
 		});
 
-		console.log("[Worker] Streaming started from LLM provider.");
-		// Returns standard Vercel AI SDK data stream for parsing by Assistant-UI
 		return result.toUIMessageStreamResponse();
 	} catch (error: unknown) {
-		console.error("[Worker] UNHANDLED ERROR in /api/chat:", error);
-		if (error instanceof Error && error.stack) {
-			console.error(error.stack);
-		}
-		return c.json(
-			{
-				error: error instanceof Error ? error.message : "Unknown Worker Error",
-			},
-			500,
-		);
+		const msg = error instanceof Error ? error.message : "Unknown error";
+		console.error("[Worker] /api/chat error:", msg);
+		return c.json({ error: msg }, 500);
 	}
 });
 

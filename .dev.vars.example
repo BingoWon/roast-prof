@@ -1,0 +1,6 @@
+# Copy this to .dev.vars and fill in your credentials for local development.
+# .dev.vars is git-ignored. NEVER commit real secrets to the repository.
+
+BASE_URL=https://openrouter.ai/api/v1
+API_KEY=your-api-key-here
+MODEL=xiaomi/mimo-v2-omni

@@ -5,7 +5,4 @@ import { defineConfig } from "vite";
 
 export default defineConfig({
 	plugins: [cloudflare(), react(), tailwindcss()],
-	build: {
-		outDir: "dist",
-	},
 });
