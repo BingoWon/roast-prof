@@ -5,10 +5,71 @@ import {
 	ComposerPrimitive,
 	MessagePrimitive,
 	ThreadPrimitive,
+	useMessagePartReasoning,
 } from "@assistant-ui/react";
 import { useAISDKRuntime } from "@assistant-ui/react-ai-sdk";
-import { Bot, Paperclip, Send, Trash2, User, X } from "lucide-react";
-import type { FC } from "react";
+import {
+	Bot,
+	ChevronDown,
+	Paperclip,
+	Send,
+	Trash2,
+	User,
+	X,
+} from "lucide-react";
+import { type FC, useState } from "react";
+
+// ── Reasoning part ────────────────────────────────────────────────────────────
+
+const ReasoningPart: FC = () => {
+	const reasoning = useMessagePartReasoning();
+	const [open, setOpen] = useState(false);
+
+	if (!reasoning?.text) return null;
+
+	const isStreaming =
+		!reasoning.text.endsWith("\n") || reasoning.text.length < 20;
+
+	return (
+		<div className="mb-3 rounded-2xl border border-violet-500/15 bg-violet-950/30 overflow-hidden transition-all">
+			{/* Header */}
+			<button
+				type="button"
+				onClick={() => setOpen((v) => !v)}
+				className="flex w-full items-center gap-2.5 px-4 py-2.5 text-left hover:bg-violet-500/5 transition-colors"
+			>
+				{/* Thinking indicator */}
+				<span className="relative flex h-3 w-3 shrink-0">
+					{isStreaming ? (
+						<>
+							<span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-violet-400 opacity-75" />
+							<span className="relative inline-flex rounded-full h-3 w-3 bg-violet-500" />
+						</>
+					) : (
+						<span className="relative inline-flex rounded-full h-3 w-3 bg-violet-500/50" />
+					)}
+				</span>
+				<span className="text-xs font-semibold text-violet-400 tracking-wide">
+					{isStreaming ? "正在思考..." : "思考过程"}
+				</span>
+				<ChevronDown
+					className={`ml-auto h-3.5 w-3.5 text-violet-500/60 transition-transform duration-200 ${open ? "rotate-180" : ""}`}
+				/>
+			</button>
+
+			{/* Content */}
+			{open && (
+				<div className="border-t border-violet-500/10 px-4 py-3 max-h-64 overflow-y-auto">
+					<p className="text-xs leading-relaxed text-violet-300/70 font-mono whitespace-pre-wrap">
+						{reasoning.text}
+					</p>
+				</div>
+			)}
+		</div>
+	);
+};
+
+// ── Attachment components ─────────────────────────────────────────────────────
 
 const UserAttachment: FC = () => (
 	<AttachmentPrimitive.Root className="group relative flex h-14 w-40 items-center justify-between rounded-xl bg-black/10 px-3 py-2 backdrop-blur-md border border-white/5 transition-all hover:bg-black/20">
@@ -20,6 +81,22 @@ const UserAttachment: FC = () => (
 		</div>
 	</AttachmentPrimitive.Root>
 );
+
+const ComposerAttachment: FC = () => (
+	<AttachmentPrimitive.Root className="group relative flex h-16 w-48 items-center justify-between rounded-2xl bg-zinc-800/80 px-3 py-2 shadow-inner border border-white/5 transition-all">
+		<div className="flex items-center gap-3 overflow-hidden">
+			<AttachmentPrimitive.unstable_Thumb className="h-12 w-12 shrink-0 rounded-xl bg-zinc-900 object-cover shadow-sm" />
+			<span className="truncate text-xs font-semibold text-zinc-300">
+				<AttachmentPrimitive.Name />
+			</span>
+		</div>
+		<AttachmentPrimitive.Remove className="absolute -right-2 -top-2 flex h-6 w-6 items-center justify-center rounded-full bg-red-500 text-white shadow-md transition-transform hover:scale-110 active:scale-95">
+			<X className="w-3.5 h-3.5" />
+		</AttachmentPrimitive.Remove>
+	</AttachmentPrimitive.Root>
+);
+
+// ── Message components ────────────────────────────────────────────────────────
 
 const UserMessage: FC = () => (
 	<MessagePrimitive.Root className="ml-auto flex max-w-[85%] flex-col items-end mb-6">
@@ -52,27 +129,18 @@ const AssistantMessage: FC = () => (
 				暴躁教授
 			</span>
 		</div>
-		<div className="relative rounded-3xl rounded-tl-sm bg-zinc-900/80 px-6 py-4 text-zinc-200 shadow-xl border border-red-500/10 backdrop-blur-xl transition-all hover:border-red-500/30">
-			<div className="leading-relaxed whitespace-pre-wrap flex flex-col gap-2">
-				<MessagePrimitive.Parts />
-			</div>
+		<div className="w-full">
+			{/* Reasoning panel sits above the reply bubble */}
+			<MessagePrimitive.Parts
+				components={{
+					Reasoning: ReasoningPart,
+				}}
+			/>
 		</div>
 	</MessagePrimitive.Root>
 );
 
-const ComposerAttachment: FC = () => (
-	<AttachmentPrimitive.Root className="group relative flex h-16 w-48 items-center justify-between rounded-2xl bg-zinc-800/80 px-3 py-2 shadow-inner border border-white/5 transition-all">
-		<div className="flex items-center gap-3 overflow-hidden">
-			<AttachmentPrimitive.unstable_Thumb className="h-12 w-12 shrink-0 rounded-xl bg-zinc-900 object-cover shadow-sm" />
-			<span className="truncate text-xs font-semibold text-zinc-300">
-				<AttachmentPrimitive.Name />
-			</span>
-		</div>
-		<AttachmentPrimitive.Remove className="absolute -right-2 -top-2 flex h-6 w-6 items-center justify-center rounded-full bg-red-500 text-white shadow-md transition-transform hover:scale-110 active:scale-95">
-			<X className="w-3.5 h-3.5" />
-		</AttachmentPrimitive.Remove>
-	</AttachmentPrimitive.Root>
-);
+// ── Main Chat component ───────────────────────────────────────────────────────
 
 export function Chat() {
 	const chat = useChat({

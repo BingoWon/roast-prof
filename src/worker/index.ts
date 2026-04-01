@@ -35,11 +35,10 @@ function extractBase64(dataUrl: string): string {
 	return idx >= 0 ? dataUrl.slice(idx + 1) : dataUrl;
 }
 
-/** Convert a single Assistant-UI MessagePart to OpenRouter's wire format. */
+/** Convert a single AssistantUI MessagePart → OpenRouter wire format. */
 function toOpenRouterPart(p: MessagePart): OpenRouterContentPart | null {
 	if (p.type === "text") return { type: "text", text: p.text };
 
-	// image / image_url → image_url format (OpenRouter standard)
 	if (p.type === "image" || p.type === "image_url") {
 		const url =
 			p.type === "image_url"
@@ -48,34 +47,31 @@ function toOpenRouterPart(p: MessagePart): OpenRouterContentPart | null {
 		return { type: "image_url", image_url: { url } };
 	}
 
-	// file → dispatch by MIME type
 	if (p.type === "file") {
 		const url = p.url ?? "";
 		const mime = p.mediaType ?? "application/octet-stream";
 		const filename = p.name ?? `attachment.${mime.split("/")[1] ?? "bin"}`;
 
-		if (mime.startsWith("image/")) {
+		if (mime.startsWith("image/"))
 			return { type: "image_url", image_url: { url } };
-		}
-		if (mime === "application/pdf") {
+		if (mime === "application/pdf")
 			return { type: "file", file: { filename, file_data: url } };
-		}
-		if (mime.startsWith("audio/")) {
-			const format = mime.split("/")[1] ?? "wav";
+		if (mime.startsWith("audio/"))
 			return {
 				type: "input_audio",
-				input_audio: { data: extractBase64(url), format },
+				input_audio: {
+					data: extractBase64(url),
+					format: mime.split("/")[1] ?? "wav",
+				},
 			};
-		}
-		if (mime.startsWith("video/")) {
+		if (mime.startsWith("video/"))
 			return { type: "video_url", video_url: { url } };
-		}
 	}
 
 	return null;
 }
 
-/** Build complete OpenRouter messages array including system prompt. */
+/** Build complete OpenRouter messages array (system + conversation). */
 function buildOpenRouterMessages(
 	uiMessages: UIMessage[],
 	systemPrompt: string,
@@ -95,8 +91,68 @@ function buildOpenRouterMessages(
 			result.push({ role: m.role, content: m.content ?? "" });
 		}
 	}
-
 	return result;
+}
+
+// ── SSE streaming transform ───────────────────────────────────────────────────
+// OpenRouter returns `delta.reasoning` for reasoning models.
+// @ai-sdk/openai recognises `delta.reasoning_content` (OpenAI o-series naming).
+// We line-buffer the SSE stream and rename the field so the SDK surfaces it as
+// ReasoningPart in toUIMessageStreamResponse(), which the frontend renders.
+
+function transformReasoningSSE(response: Response): Response {
+	if (!response.body) return response;
+
+	const encoder = new TextEncoder();
+	const decoder = new TextDecoder();
+	let buffer = "";
+
+	const transform = new TransformStream<Uint8Array, Uint8Array>({
+		transform(chunk, controller) {
+			buffer += decoder.decode(chunk, { stream: true });
+			const lines = buffer.split("\n");
+			buffer = lines.pop() ?? "";
+
+			for (const line of lines) {
+				if (!line.startsWith("data: ")) {
+					controller.enqueue(encoder.encode(`${line}\n`));
+					continue;
+				}
+				const data = line.slice(6).trim();
+				if (data === "[DONE]") {
+					controller.enqueue(encoder.encode(`${line}\n`));
+					continue;
+				}
+				try {
+					const json = JSON.parse(data);
+					if (Array.isArray(json.choices)) {
+						for (const choice of json.choices) {
+							if (
+								choice.delta &&
+								choice.delta.reasoning !== undefined &&
+								choice.delta.reasoning_content === undefined
+							) {
+								choice.delta.reasoning_content = choice.delta.reasoning;
+								delete choice.delta.reasoning;
+							}
+						}
+					}
+					controller.enqueue(encoder.encode(`data: ${JSON.stringify(json)}\n`));
+				} catch {
+					controller.enqueue(encoder.encode(`${line}\n`));
+				}
+			}
+		},
+		flush(controller) {
+			if (buffer) controller.enqueue(encoder.encode(buffer));
+		},
+	});
+
+	return new Response(response.body.pipeThrough(transform), {
+		status: response.status,
+		statusText: response.statusText,
+		headers: response.headers,
+	});
 }
 
 // ── Routes ────────────────────────────────────────────────────────────────────
@@ -113,36 +169,37 @@ app.post("/api/chat", async (c) => {
 		const systemPrompt =
 			"你现在是林亦频道的「暴躁教授」。用极其刻薄、但也足够专业的学术口吻回答问题。偶尔嘲讽用户的无知，偶尔冷幽默。保持中文，短句为主。";
 
-		// Build raw OpenRouter message format upfront
 		const openRouterMessages = buildOpenRouterMessages(messages, systemPrompt);
-
 		const model = c.env.MODEL;
+
+		const isMultimodal = messages.some((m) =>
+			m.parts?.some((p) => p.type !== "text"),
+		);
 		console.log(
-			`[Worker] ${messages.length} msgs → ${model} (multimodal: ${messages.some((m) => m.parts?.some((p) => p.type !== "text"))})`,
+			`[Worker] ${messages.length} msgs → ${model} (multimodal: ${isMultimodal})`,
 		);
 
 		const provider = createOpenAI({
 			baseURL: c.env.BASE_URL,
 			apiKey: c.env.API_KEY,
-			// Simulate request origin for OpenRouter routing & analytics
 			headers: {
 				"HTTP-Referer": c.env.SITE_URL,
 				"X-OpenRouter-Title": c.env.SITE_NAME,
 				"X-OpenRouter-Categories": c.env.SITE_CATEGORIES,
 			},
-			// Intercept the request to inject the correctly-formatted OpenRouter messages.
-			// The SDK validates its own types, but the actual wire payload uses OpenRouter's format.
 			fetch: async (url, options) => {
+				// Inject OpenRouter-formatted messages
 				const body = JSON.parse((options as RequestInit).body as string);
 				body.messages = openRouterMessages;
-				return fetch(url as string, {
+				const raw = await fetch(url as string, {
 					...(options as RequestInit),
 					body: JSON.stringify(body),
 				});
+				// Map delta.reasoning → delta.reasoning_content for SDK recognition
+				return transformReasoningSSE(raw);
 			},
 		});
 
-		// streamText handles streaming/response format; actual request is intercepted above
 		const result = streamText({
 			model: provider.chat(model),
 			messages: [{ role: "user", content: "." }], // placeholder — real messages injected via fetch
