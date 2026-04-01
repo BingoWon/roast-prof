@@ -74,7 +74,7 @@ app.post("/api/chat", async (c) => {
 
 		console.log("[Worker] Streaming started from LLM provider.");
 		// Returns standard Vercel AI SDK data stream for parsing by Assistant-UI
-		return result.toTextStreamResponse();
+		return result.toUIMessageStreamResponse();
 	} catch (error: unknown) {
 		console.error("[Worker] UNHANDLED ERROR in /api/chat:", error);
 		if (error instanceof Error && error.stack) {
