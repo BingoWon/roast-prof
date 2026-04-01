@@ -75,7 +75,17 @@ const ComposerAttachment: FC = () => (
 );
 
 export function Chat() {
-	const chat = useChat();
+	const chat = useChat({
+		onError: (err: unknown) => {
+			console.error("[Frontend] Chat Error:", err);
+			alert(
+				`⚠️ 聊天发送错误:\n${(err as Error).name}: ${(err as Error).message}\n请检查控制台或后端日志确认详情。`,
+			);
+		},
+		onFinish: (msg) => {
+			console.log("[Frontend] Chat Finished successfully:", msg);
+		},
+	});
 	const runtime = useAISDKRuntime(chat);
 
 	return (
