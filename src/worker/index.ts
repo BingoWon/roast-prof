@@ -17,6 +17,11 @@ app.post("/api/chat", async (c) => {
 	const openrouter = createOpenAI({
 		baseURL: "https://openrouter.ai/api/v1",
 		apiKey: c.env.OPENROUTER_API_KEY,
+		headers: {
+			"HTTP-Referer": "https://openclaw.ai",
+			"X-OpenRouter-Title": "OpenClaw",
+			"X-OpenRouter-Categories": "cli-agent",
+		},
 	});
 
 	// Multi-modal model for handling Text, Images, Video, Audio
