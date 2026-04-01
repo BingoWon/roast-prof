@@ -1,0 +1,44 @@
+{
+	"name": "roast-prof",
+	"version": "0.1.0",
+	"private": true,
+	"type": "module",
+	"scripts": {
+		"dev": "vite",
+		"build": "vite build",
+		"deploy": "pnpm build && wrangler deploy",
+		"start": "wrangler dev",
+		"lint": "biome check --write .",
+		"typecheck": "tsc -b",
+		"check": "pnpm lint && pnpm typecheck",
+		"cf-typegen": "wrangler types"
+	},
+	"dependencies": {
+		"@hono/zod-validator": "^0.7.6",
+		"hono": "^4.12.9",
+		"react": "^19.2.4",
+		"react-dom": "^19.2.4",
+		"zod": "^4.3.6"
+	},
+	"devDependencies": {
+		"@biomejs/biome": "^2.4.10",
+		"@cloudflare/vitest-pool-workers": "^0.14.0",
+		"@tailwindcss/vite": "^4.2.2",
+		"@types/node": "^25.5.0",
+		"@types/react": "^19.2.14",
+		"@types/react-dom": "^19.2.3",
+		"@vitejs/plugin-react": "^6.0.1",
+		"tailwindcss": "^4.2.2",
+		"typescript": "^6.0.2",
+		"vite": "^8.0.3",
+		"vitest": "^4.1.2",
+		"wrangler": "^4.79.0"
+	},
+	"pnpm": {
+		"onlyBuiltDependencies": [
+			"esbuild",
+			"sharp",
+			"workerd"
+		]
+	}
+}
