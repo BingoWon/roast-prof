@@ -11,7 +11,12 @@ export const WeatherToolUI: FC<ToolCallMessagePartProps> = (props) => {
 
 	const a = args as { location: string } | undefined;
 	const r = result as
-		| { temperature: number; condition: string; humidity: number; wind: number }
+		| {
+				temperature: number;
+				condition: string;
+				humidity: number;
+				wind_speed: number;
+		  }
 		| undefined;
 
 	if (isError) return <ToolCallFallback {...props} />;
@@ -59,7 +64,7 @@ export const WeatherToolUI: FC<ToolCallMessagePartProps> = (props) => {
 					<div className="flex items-center gap-2">
 						<Wind className="w-4 h-4 text-blue-500 dark:text-blue-400" />
 						<span className="text-xs font-semibold text-blue-800/80 dark:text-blue-100/80">
-							{r?.wind ?? "--"}风速
+							{r?.wind_speed ?? "--"}风速
 						</span>
 					</div>
 				</div>

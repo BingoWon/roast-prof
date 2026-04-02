@@ -171,6 +171,25 @@
 	box-sizing: border-box;
 }
 
+.remove-button {
+	background: none;
+	border: none;
+	color: #999;
+	font-size: 20px;
+	cursor: pointer;
+	padding: 0;
+	width: 28px;
+	height: 28px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	margin-left: 10px;
+}
+
+.remove-button:hover {
+	color: #ff5722;
+}
+
 .ingredient-card {
 	display: flex;
 	align-items: center;
@@ -257,25 +276,6 @@
 .ingredient-name-input::placeholder,
 .ingredient-amount-input::placeholder {
 	color: #aaa;
-}
-
-.remove-button {
-	background: none;
-	border: none;
-	color: #999;
-	font-size: 20px;
-	cursor: pointer;
-	padding: 0;
-	width: 28px;
-	height: 28px;
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	margin-left: 10px;
-}
-
-.remove-button:hover {
-	color: #ff5722;
 }
 
 /* Instructions */

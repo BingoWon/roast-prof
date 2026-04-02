@@ -83,7 +83,6 @@ export function RecipePanel({
 	onImprove?: () => void;
 }) {
 	const [editingIdx, setEditingIdx] = useState<number | null>(null);
-	const newInstructionRef = useRef<HTMLTextAreaElement>(null);
 
 	const addIngredient = () => {
 		onUpdate({
@@ -110,16 +109,13 @@ export function RecipePanel({
 		onUpdate({ ingredients: updated });
 	};
 
+	const pendingFocusIdx = useRef<number | null>(null);
+
 	const addInstruction = () => {
 		const newIdx = recipe.instructions.length;
 		onUpdate({ instructions: [...recipe.instructions, ""] });
 		setEditingIdx(newIdx);
-		setTimeout(() => {
-			const areas = document.querySelectorAll(
-				".instructions-container textarea",
-			);
-			(areas[areas.length - 1] as HTMLTextAreaElement)?.focus();
-		}, 50);
+		pendingFocusIdx.current = newIdx;
 	};
 
 	const updateInstruction = (index: number, value: string) => {
@@ -278,7 +274,8 @@ export function RecipePanel({
 				</div>
 				<div className="instructions-container">
 					{recipe.instructions.map((inst, i) => (
-						<div key={`${inst.slice(0, 30)}`} className="instruction-item">
+						// biome-ignore lint/suspicious/noArrayIndexKey: instructions are appended/removed, not reordered
+						<div key={i} className="instruction-item">
 							<div className="instruction-number">{i + 1}</div>
 							{i < recipe.instructions.length - 1 && (
 								<div className="instruction-line" />
@@ -290,11 +287,12 @@ export function RecipePanel({
 								onClick={() => setEditingIdx(i)}
 							>
 								<textarea
-									ref={
-										i === recipe.instructions.length - 1
-											? newInstructionRef
-											: undefined
-									}
+									ref={(el) => {
+										if (el && i === pendingFocusIdx.current) {
+											el.focus();
+											pendingFocusIdx.current = null;
+										}
+									}}
 									className="instruction-textarea"
 									value={inst || ""}
 									onChange={(e) => updateInstruction(i, e.target.value)}

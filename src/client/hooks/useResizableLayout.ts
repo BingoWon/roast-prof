@@ -43,21 +43,33 @@ export function useResizableLayout(
 
 	const defaultsRef = useRef(initDefaults);
 	const startRef = useRef({ x: 0, leftW: 0, rightW: 0 });
+	const prevContainerWidth = useRef(initW);
 
 	useEffect(() => {
 		const w = getContainerWidth();
 		const d = calcDefaults(w);
 		defaultsRef.current = d;
+		prevContainerWidth.current = w;
 		setLeftWidth(d.left);
 		setRightWidth(d.right);
 	}, [getContainerWidth, calcDefaults]);
 
 	useEffect(() => {
 		const onResize = () => {
-			const d = calcDefaults(getContainerWidth());
-			defaultsRef.current = d;
-			if (!leftCollapsed) setLeftWidth((prev) => Math.min(prev, d.left * 2));
-			if (!rightCollapsed) setRightWidth((prev) => Math.min(prev, d.right * 2));
+			const newW = getContainerWidth();
+			const prevW = prevContainerWidth.current;
+			prevContainerWidth.current = newW;
+			defaultsRef.current = calcDefaults(newW);
+
+			if (prevW > 0 && newW !== prevW) {
+				const ratio = newW / prevW;
+				if (!leftCollapsed) {
+					setLeftWidth((prev) => Math.round(prev * ratio));
+				}
+				if (!rightCollapsed) {
+					setRightWidth((prev) => Math.round(prev * ratio));
+				}
+			}
 		};
 		window.addEventListener("resize", onResize);
 		return () => window.removeEventListener("resize", onResize);

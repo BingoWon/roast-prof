@@ -4,31 +4,29 @@ import { z } from "zod";
 export const tools = {
 	get_current_time: tool({
 		description:
-			"Returns the current date and time. Call this whenever the user asks about the current time or date.",
+			"获取当前日期和时间。当用户询问现在几点或今天日期时调用此工具。",
 		inputSchema: zodSchema(
 			z.object({
 				timezone: z
 					.string()
 					.optional()
-					.describe(
-						"IANA timezone identifier, e.g. 'Asia/Shanghai'. Defaults to UTC.",
-					),
+					.describe("IANA 时区标识符，如 'Asia/Shanghai'，默认为 UTC"),
 			}),
 		),
-		execute: async ({ timezone = "UTC" }: { timezone?: string }) => {
+		execute: async ({ timezone = "Asia/Shanghai" }: { timezone?: string }) => {
 			const now = new Date();
 			return {
 				utc: now.toISOString(),
-				local: now.toLocaleString("en-US", { timeZone: timezone }),
+				local: now.toLocaleString("zh-CN", { timeZone: timezone }),
 				timezone,
 			};
 		},
 	}),
 	get_weather: tool({
-		description: "Get the current weather for a location.",
+		description: "获取指定城市的当前天气信息。当用户询问天气时调用此工具。",
 		inputSchema: zodSchema(
 			z.object({
-				location: z.string().describe("The city name, e.g., 'San Francisco'"),
+				location: z.string().describe("城市名称，如「北京」「上海」"),
 				unit: z.enum(["celsius", "fahrenheit"]).optional().default("celsius"),
 			}),
 		),
@@ -38,7 +36,7 @@ export const tools = {
 				location,
 				temperature:
 					Math.floor(Math.random() * 15) + (unit === "celsius" ? 10 : 50),
-				condition: ["Partly Cloudy", "Sunny", "Raining", "Thunderstorm"][
+				condition: ["多云", "晴天", "小雨", "雷阵雨"][
 					Math.floor(Math.random() * 4)
 				],
 				humidity: Math.floor(Math.random() * 40) + 40,
@@ -48,10 +46,10 @@ export const tools = {
 		},
 	}),
 	search_web: tool({
-		description: "Search the web for information.",
+		description: "搜索网络信息。当用户需要查找资料或搜索信息时调用此工具。",
 		inputSchema: zodSchema(
 			z.object({
-				query: z.string().describe("The search query"),
+				query: z.string().describe("搜索关键词"),
 			}),
 		),
 		execute: async ({ query }) => {

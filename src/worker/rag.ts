@@ -10,7 +10,7 @@ import { documents, papers } from "./schema";
 const DIMENSIONS = 1536;
 const CHUNK_SIZE = 512;
 const CHUNK_OVERLAP = 64;
-const INSERT_BATCH = 20;
+const INSERT_BATCH = 15;
 
 type EmbeddingEnv = {
 	EMBEDDING_BASE_URL: string;
@@ -149,14 +149,14 @@ export async function ingestPdf(
 
 export async function deletePaper(
 	paperId: string,
-	opts: { db: DbClient; r2: R2Bucket },
+	opts: { db: DbClient; r2: R2Bucket; userId: string },
 ) {
 	const [paper] = await opts.db
 		.select()
 		.from(papers)
 		.where(eq(papers.id, paperId))
 		.limit(1);
-	if (!paper) return;
+	if (!paper || paper.userId !== opts.userId) return;
 
 	await opts.r2.delete(paper.r2Key);
 	if (paper.markdownR2Key) await opts.r2.delete(paper.markdownR2Key);

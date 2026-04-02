@@ -47,9 +47,10 @@ export function createModel(env: Env) {
 }
 
 export function createTitleModel(env: Env) {
+	const titleModel = env.TITLE_MODEL || env.MODEL;
 	const provider = createOpenAI({
 		baseURL: env.BASE_URL,
 		apiKey: env.API_KEY,
 	});
-	return provider.chat(env.MODEL);
+	return provider.chat(titleModel);
 }

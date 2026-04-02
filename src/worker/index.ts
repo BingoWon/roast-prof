@@ -4,6 +4,7 @@ import {
 	stepCountIs,
 	streamText,
 } from "ai";
+import { eq } from "drizzle-orm";
 import { Hono } from "hono";
 import { getUserId } from "./auth";
 import {
@@ -27,6 +28,7 @@ import {
 	listPapers,
 	retrieveContext,
 } from "./rag";
+import { papers } from "./schema";
 import { tools } from "./tools";
 
 const app = new Hono<{ Bindings: Env }>();
@@ -128,7 +130,7 @@ app.delete("/api/papers/:id", async (c) => {
 	const userId = getUserId(c);
 	if (!userId) return c.json({ error: "未授权" }, 401);
 	const db = createDb(c.env.DB);
-	await deletePaper(c.req.param("id"), { db, r2: c.env.R2 });
+	await deletePaper(c.req.param("id"), { db, r2: c.env.R2, userId });
 	return c.json({ ok: true });
 });
 
@@ -137,8 +139,6 @@ app.get("/api/papers/:id/download", async (c) => {
 	if (!userId) return c.json({ error: "未授权" }, 401);
 
 	const db = createDb(c.env.DB);
-	const { papers } = await import("./schema");
-	const { eq } = await import("drizzle-orm");
 	const [paper] = await db
 		.select()
 		.from(papers)
@@ -176,7 +176,22 @@ app.get("/api/papers/:id/markdown", async (c) => {
 
 app.get("/api/health", (c) => c.json({ status: "ok" }));
 
-// ── Chat (Mastra model + AI SDK streamText + Assistant-UI) ────────────────────
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function extractLastUserText(messages: ChatRequestMessage[]): string {
+	return (
+		[...messages]
+			.reverse()
+			.find((m) => m.role === "user")
+			?.parts?.filter(
+				(p): p is { type: "text"; text: string } => p.type === "text",
+			)
+			.map((p) => p.text)
+			.join(" ") ?? ""
+	);
+}
+
+// ── Chat (AI SDK streamText + Assistant-UI) ──────────────────────────────────
 
 app.post("/api/chat", async (c) => {
 	try {
@@ -190,43 +205,32 @@ app.post("/api/chat", async (c) => {
 		if (!c.env.MODEL) return c.json({ error: "缺少 MODEL 配置" }, 500);
 
 		const db = createDb(c.env.DB);
+		const lastUserMsg = [...messages].reverse().find((m) => m.role === "user");
 
 		// ── Persist user message ──────────────────────────────────────────────
-		if (threadId && userId) {
+		if (threadId && userId && lastUserMsg) {
 			try {
 				await ensureThread(db, threadId, userId);
-				const lastUserMsg = [...messages]
-					.reverse()
-					.find((m) => m.role === "user");
-				if (lastUserMsg) {
-					const parts = lastUserMsg.parts?.length
-						? lastUserMsg.parts
-						: [{ type: "text" as const, text: lastUserMsg.content ?? "" }];
-					await saveMessages(db, [
-						{
-							id: lastUserMsg.id ?? crypto.randomUUID(),
-							threadId,
-							role: "user",
-							parts: parts as unknown[],
-							createdAt: Math.floor(Date.now() / 1000),
-						},
-					]);
-					await touchThread(db, threadId);
-				}
+				const parts = lastUserMsg.parts?.length
+					? lastUserMsg.parts
+					: [{ type: "text" as const, text: lastUserMsg.content ?? "" }];
+				await saveMessages(db, [
+					{
+						id: lastUserMsg.id ?? crypto.randomUUID(),
+						threadId,
+						role: "user",
+						parts: parts as unknown[],
+						createdAt: Math.floor(Date.now() / 1000),
+					},
+				]);
+				await touchThread(db, threadId);
 			} catch (e) {
 				console.error("[Worker] persist user msg:", e);
 			}
 		}
 
 		// ── RAG: retrieve relevant context ───────────────────────────────────
-		const lastUserText = [...messages]
-			.reverse()
-			.find((m) => m.role === "user")
-			?.parts?.filter(
-				(p): p is { type: "text"; text: string } => p.type === "text",
-			)
-			.map((p) => p.text)
-			.join(" ");
+		const lastUserText = extractLastUserText(messages);
 
 		let systemPrompt = c.env.SYSTEM_PROMPT || SYSTEM_PROMPT;
 		if (lastUserText && c.env.VECTORIZE && c.env.EMBEDDING_BASE_URL) {
@@ -241,25 +245,15 @@ app.post("/api/chat", async (c) => {
 					systemPrompt += `\n\n以下是与用户问题相关的参考资料，请结合这些内容回答：\n\n${ragContext}`;
 				}
 			} catch {
-				// Vectorize 仅支持远程运行，本地开发时静默跳过
+				// Vectorize only works remotely; silently skip in local dev
 			}
 		}
 
 		// ── Determine if title generation is needed ──────────────────────────
-		const isFirstMessage =
-			messages.filter((m) => m.role === "user").length === 1;
+		const userMessages = messages.filter((m) => m.role === "user");
+		const isFirstMessage = userMessages.length === 1;
 		const firstUserText = isFirstMessage
-			? messages
-					.filter((m) => m.role === "user")
-					.flatMap((m) =>
-						(m.parts ?? [])
-							.filter(
-								(p): p is { type: "text"; text: string } => p.type === "text",
-							)
-							.map((p) => p.text),
-					)
-					.join(" ")
-					.slice(0, 200)
+			? extractLastUserText(userMessages).slice(0, 200)
 			: "";
 
 		// ── Stream with concurrent title generation ──────────────────────────
