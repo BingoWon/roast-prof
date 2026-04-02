@@ -7,281 +7,28 @@ import {
 	ComposerPrimitive,
 	MessagePrimitive,
 	ThreadPrimitive,
-	type ToolCallMessagePartProps,
-	useMessagePartReasoning,
-	useMessagePartText,
 } from "@assistant-ui/react";
 import { useAISDKRuntime } from "@assistant-ui/react-ai-sdk";
 import {
 	Bot,
-	Check,
-	CheckCircle,
 	ChevronDown,
 	ChevronLeft,
 	ChevronRight,
-	Circle,
-	Clock,
 	Copy,
 	Paperclip,
 	RefreshCw,
 	Send,
 	Trash2,
 	User,
-	Wrench,
 	X,
-	XCircle,
 } from "lucide-react";
-import { type FC, useEffect, useRef, useState } from "react";
-
-// ── Reasoning Part ────────────────────────────────────────────────────────────
-// Auto-opens when streaming starts, auto-closes 1s after streaming ends,
-// tracks "Thought for N seconds" duration.
-
-const AUTO_CLOSE_DELAY = 1000;
-
-const ReasoningPart: FC = () => {
-	const reasoning = useMessagePartReasoning();
-	const isStreaming = reasoning?.status?.type === "running";
-
-	// open/close state
-	const [open, setOpen] = useState(false);
-	const [hasAutoClosed, setHasAutoClosed] = useState(false);
-	const hasEverStreamedRef = useRef(false);
-
-	// duration tracking
-	const startTimeRef = useRef<number | null>(null);
-	const [duration, setDuration] = useState<number | undefined>(undefined);
-
-	const [copied, setCopied] = useState(false);
-
-	// Track streaming start time + compute duration on finish
-	useEffect(() => {
-		if (isStreaming) {
-			hasEverStreamedRef.current = true;
-			if (startTimeRef.current === null) {
-				startTimeRef.current = Date.now();
-			}
-		} else if (startTimeRef.current !== null) {
-			const secs = Math.ceil((Date.now() - startTimeRef.current) / 1000);
-			setDuration(secs);
-			startTimeRef.current = null;
-		}
-	}, [isStreaming]);
-
-	// Auto-open when streaming starts
-	useEffect(() => {
-		if (isStreaming && !open) setOpen(true);
-	}, [isStreaming, open]);
-
-	// Auto-close 1s after streaming ends (once only)
-	useEffect(() => {
-		if (hasEverStreamedRef.current && !isStreaming && open && !hasAutoClosed) {
-			const timer = setTimeout(() => {
-				setOpen(false);
-				setHasAutoClosed(true);
-			}, AUTO_CLOSE_DELAY);
-			return () => clearTimeout(timer);
-		}
-	}, [isStreaming, open, hasAutoClosed]);
-
-	if (!reasoning?.text) return null;
-
-	const headerLabel = isStreaming
-		? "Thinking…"
-		: duration !== undefined
-			? `Thought for ${duration}s`
-			: "Reasoning";
-
-	const handleCopy = () => {
-		navigator.clipboard.writeText(reasoning.text ?? "");
-		setCopied(true);
-		setTimeout(() => setCopied(false), 1500);
-	};
-
-	return (
-		<div className="mb-2 rounded-2xl border border-violet-500/15 bg-violet-950/20 overflow-hidden transition-all duration-300">
-			<button
-				type="button"
-				onClick={() => setOpen((v) => !v)}
-				className="flex w-full items-center gap-2.5 px-4 py-2.5 text-left hover:bg-violet-500/5 transition-colors group"
-			>
-				<span className="relative flex h-2.5 w-2.5 shrink-0">
-					{isStreaming ? (
-						<>
-							<span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-violet-400 opacity-75" />
-							<span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-violet-500" />
-						</>
-					) : (
-						<span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-violet-500/50" />
-					)}
-				</span>
-				<span className="text-[11px] font-semibold text-violet-400/80 tracking-widest uppercase select-none">
-					{headerLabel}
-				</span>
-				{!isStreaming && !open && reasoning.text && (
-					<span className="ml-1 text-[10px] text-violet-500/40 truncate max-w-[200px] hidden sm:block">
-						{reasoning.text.slice(0, 60).replace(/\n/g, " ")}…
-					</span>
-				)}
-				<ChevronDown
-					className={`ml-auto h-3 w-3 text-violet-500/40 transition-transform duration-200 group-hover:text-violet-400/60 ${open ? "rotate-180" : ""}`}
-				/>
-			</button>
-
-			{open && (
-				<div className="border-t border-violet-500/10">
-					<div
-						className="relative max-h-72 overflow-y-auto px-4 py-3"
-						ref={(el) => {
-							// Auto-scroll to bottom while streaming
-							if (el && isStreaming) el.scrollTop = el.scrollHeight;
-						}}
-					>
-						<p className="text-[11px] leading-relaxed text-violet-300/60 font-mono whitespace-pre-wrap">
-							{reasoning.text}
-						</p>
-					</div>
-					<div className="flex justify-end px-4 py-2 border-t border-violet-500/10">
-						<button
-							type="button"
-							onClick={handleCopy}
-							className="flex items-center gap-1.5 text-[10px] text-violet-500/50 hover:text-violet-400/80 transition-colors"
-						>
-							{copied ? (
-								<Check className="h-3 w-3 text-green-400" />
-							) : (
-								<Copy className="h-3 w-3" />
-							)}
-							{copied ? "Copied" : "Copy"}
-						</button>
-					</div>
-				</div>
-			)}
-		</div>
-	);
-};
-
-// ── Text Part ─────────────────────────────────────────────────────────────────
-
-const TextPart: FC = () => {
-	const { text } = useMessagePartText();
-	if (!text) return null;
-	return (
-		<div className="relative rounded-3xl rounded-tl-sm bg-zinc-900/80 px-6 py-4 text-zinc-200 shadow-xl border border-white/5 backdrop-blur-xl transition-all hover:border-white/10">
-			<p className="leading-relaxed whitespace-pre-wrap text-sm">{text}</p>
-		</div>
-	);
-};
-
-// ── Tool Call Part ────────────────────────────────────────────────────────────
-// Registered as tools.Fallback — receives ToolCallMessagePartProps directly as FC props
-// Status states mirror vercel/chatbot's tool.tsx: pending → running → done/error
-
-type ToolStatus = "pending" | "running" | "done" | "error";
-
-function getToolStatus(hasResult: boolean, isError: boolean): ToolStatus {
-	if (isError) return "error";
-	if (hasResult) return "done";
-	return "running";
-}
-
-const toolStatusConfig: Record<
-	ToolStatus,
-	{ label: string; icon: FC<{ className?: string }>; colors: string }
-> = {
-	pending: {
-		label: "Pending",
-		icon: Circle,
-		colors: "text-zinc-400 border-zinc-500/20 bg-zinc-900/60",
-	},
-	running: {
-		label: "Running",
-		icon: Clock,
-		colors: "text-amber-400 border-amber-500/20 bg-amber-950/20",
-	},
-	done: {
-		label: "Done",
-		icon: CheckCircle,
-		colors: "text-green-400 border-green-500/20 bg-green-950/20",
-	},
-	error: {
-		label: "Error",
-		icon: XCircle,
-		colors: "text-red-400 border-red-500/20 bg-red-950/20",
-	},
-};
-
-const ToolCallPart: FC<ToolCallMessagePartProps> = ({
-	toolName,
-	args,
-	argsText,
-	result,
-	isError,
-}) => {
-	const [open, setOpen] = useState(true);
-	const hasResult = result !== undefined;
-	const status = getToolStatus(hasResult, isError === true);
-	const { label, icon: StatusIcon, colors } = toolStatusConfig[status];
-	const isRunning = status === "running";
-
-	return (
-		<div
-			className={`mb-2 rounded-2xl border overflow-hidden transition-all duration-200 ${colors}`}
-		>
-			<button
-				type="button"
-				onClick={() => setOpen((v) => !v)}
-				className="flex w-full items-center gap-2.5 px-4 py-2.5 text-left hover:bg-white/5 transition-colors"
-			>
-				<Wrench className="h-3.5 w-3.5 shrink-0 text-current/60" />
-				<span className="text-[11px] font-semibold tracking-wider uppercase select-none">
-					{toolName}
-				</span>
-				{/* Status badge */}
-				<span className="ml-1.5 flex items-center gap-1 rounded-full border border-current/20 bg-current/5 px-2 py-0.5">
-					<StatusIcon
-						className={`h-2.5 w-2.5 ${isRunning ? "animate-pulse" : ""}`}
-					/>
-					<span
-						className={`text-[9px] font-semibold tracking-widest uppercase ${isRunning ? "animate-pulse" : ""}`}
-					>
-						{label}
-					</span>
-				</span>
-				<ChevronDown
-					className={`ml-auto h-3 w-3 opacity-40 transition-transform duration-200 ${open ? "rotate-180" : ""}`}
-				/>
-			</button>
-
-			{open && (
-				<div className="border-t border-current/10 divide-y divide-current/10">
-					{(args !== undefined || argsText) && (
-						<div className="px-4 py-3">
-							<div className="text-[10px] font-semibold opacity-40 uppercase tracking-widest mb-1.5">
-								Parameters
-							</div>
-							<pre className="text-[11px] opacity-70 font-mono whitespace-pre-wrap break-all bg-black/20 rounded-lg px-3 py-2">
-								{argsText || JSON.stringify(args, null, 2)}
-							</pre>
-						</div>
-					)}
-					{result !== undefined && (
-						<div className="px-4 py-3">
-							<div className="text-[10px] font-semibold opacity-40 uppercase tracking-widest mb-1.5">
-								{isError ? "Error" : "Result"}
-							</div>
-							<pre className="text-[11px] opacity-70 font-mono whitespace-pre-wrap break-all bg-black/20 rounded-lg px-3 py-2">
-								{typeof result === "string"
-									? result
-									: JSON.stringify(result, null, 2)}
-							</pre>
-						</div>
-					)}
-				</div>
-			)}
-		</div>
-	);
-};
+import type { FC } from "react";
+import { EmptyState } from "./components/EmptyState";
+import { ReasoningPart } from "./components/message/ReasoningPart";
+import { TextPart } from "./components/message/TextPart";
+import { SearchToolUI } from "./components/tools/SearchToolUI";
+import { ToolCallFallback } from "./components/tools/ToolCallFallback";
+import { WeatherToolUI } from "./components/tools/WeatherToolUI";
 
 // ── Branch Picker ─────────────────────────────────────────────────────────────
 
@@ -329,7 +76,7 @@ const AssistantActionBar: FC = () => (
 	</ActionBarPrimitive.Root>
 );
 
-// ── Attachment components ─────────────────────────────────────────────────────
+// ── Attachment Components ─────────────────────────────────────────────────────
 
 const UserAttachment: FC = () => (
 	<AttachmentPrimitive.Root className="group relative flex h-14 w-40 items-center justify-between rounded-xl bg-black/10 px-3 py-2 backdrop-blur-md border border-white/5 transition-all hover:bg-black/20">
@@ -356,7 +103,7 @@ const ComposerAttachment: FC = () => (
 	</AttachmentPrimitive.Root>
 );
 
-// ── Message components ────────────────────────────────────────────────────────
+// ── Message Components ────────────────────────────────────────────────────────
 
 const UserMessage: FC = () => (
 	<MessagePrimitive.Root className="ml-auto flex max-w-[85%] flex-col items-end mb-6 group">
@@ -421,7 +168,13 @@ const AssistantMessage: FC = () => (
 				components={{
 					Text: TextPart,
 					Reasoning: ReasoningPart,
-					tools: { Fallback: ToolCallPart },
+					tools: {
+						Fallback: ToolCallFallback,
+						by_name: {
+							get_weather: WeatherToolUI,
+							search_web: SearchToolUI,
+						},
+					},
 				}}
 			/>
 		</div>
@@ -431,71 +184,19 @@ const AssistantMessage: FC = () => (
 	</MessagePrimitive.Root>
 );
 
-// ── Empty state ────────────────────────────────────────────────────────────────
-
-const EmptyState: FC = () => (
-	<div className="absolute inset-0 flex flex-col items-center justify-center text-center px-4 animate-in fade-in duration-700 pointer-events-none select-none">
-		<div className="w-20 h-20 mb-6 rounded-3xl bg-zinc-900 border border-white/5 flex items-center justify-center shadow-2xl pointer-events-none ring-1 ring-white/10">
-			<Bot className="w-10 h-10 text-zinc-400" />
-		</div>
-		<h2 className="text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-br from-white to-zinc-500 mb-3 tracking-tight">
-			AI Playground
-		</h2>
-		<p className="text-zinc-500 max-w-sm mx-auto text-sm leading-relaxed mb-8">
-			Test and validate language models, tools, reasoning capabilities, and
-			multimodal handling in a modern UI framework.
-		</p>
-		{/* Feature badges */}
-		<div className="flex flex-wrap items-center justify-center gap-2 max-w-xs">
-			{[
-				{
-					label: "Reasoning",
-					color: "bg-violet-500/10 text-violet-400 border-violet-500/20",
-				},
-				{
-					label: "Multimodal",
-					color: "bg-blue-500/10 text-blue-400 border-blue-500/20",
-				},
-				{
-					label: "Vision",
-					color: "bg-cyan-500/10 text-cyan-400 border-cyan-500/20",
-				},
-				{
-					label: "Tool Use",
-					color: "bg-amber-500/10 text-amber-400 border-amber-500/20",
-				},
-				{
-					label: "Branching",
-					color: "bg-green-500/10 text-green-400 border-green-500/20",
-				},
-			].map((f) => (
-				<span
-					key={f.label}
-					className={`px-2.5 py-1 rounded-full text-[10px] font-semibold border tracking-wide ${f.color}`}
-				>
-					{f.label}
-				</span>
-			))}
-		</div>
-	</div>
-);
-
 // ── Main Chat ─────────────────────────────────────────────────────────────────
 
 export function Chat() {
 	const chat = useChat({
 		onError: (err: unknown) => {
-			console.error("[Frontend] Chat Error:", err);
-		},
-		onFinish: (msg) => {
-			console.log("[Frontend] Chat Finished:", msg);
+			console.error("[Chat] Error:", err);
 		},
 	});
 	const runtime = useAISDKRuntime(chat);
 
 	return (
 		<AssistantRuntimeProvider runtime={runtime}>
-			<div className="flex h-full w-full flex-col bg-[#09090b] relative overflow-hidden font-sans">
+			<div className="flex h-full w-full flex-col relative overflow-hidden font-sans">
 				{/* Ambient glow */}
 				<div className="absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-3xl h-96 bg-blue-500/5 rounded-full blur-[120px] pointer-events-none" />
 
@@ -504,7 +205,14 @@ export function Chat() {
 					<ThreadPrimitive.Viewport className="flex-1 overflow-y-auto px-4 md:px-6 py-8 scroll-smooth">
 						{/* Empty state */}
 						<ThreadPrimitive.Empty>
-							<EmptyState />
+							<EmptyState
+								onPredefinedClick={(text) =>
+									runtime.thread.append({
+										role: "user",
+										content: [{ type: "text", text }],
+									})
+								}
+							/>
 						</ThreadPrimitive.Empty>
 
 						<ThreadPrimitive.Messages

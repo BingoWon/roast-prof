@@ -39,6 +39,63 @@ const tools = {
 			};
 		},
 	}),
+	get_weather: tool({
+		description: "Get the current weather for a location.",
+		inputSchema: zodSchema(
+			z.object({
+				location: z.string().describe("The city name, e.g., 'San Francisco'"),
+				unit: z.enum(["celsius", "fahrenheit"]).optional().default("celsius"),
+			}),
+		),
+		execute: async ({ location, unit }) => {
+			// Mock data
+			await new Promise((resolve) => setTimeout(resolve, 800)); // simulate network
+			return {
+				location,
+				temperature:
+					Math.floor(Math.random() * 15) + (unit === "celsius" ? 10 : 50),
+				condition: ["Partly Cloudy", "Sunny", "Raining", "Thunderstorm"][
+					Math.floor(Math.random() * 4)
+				],
+				humidity: Math.floor(Math.random() * 40) + 40,
+				wind_speed: Math.floor(Math.random() * 20) + 5,
+				unit,
+			};
+		},
+	}),
+	search_web: tool({
+		description: "Search the web for information.",
+		inputSchema: zodSchema(
+			z.object({
+				query: z.string().describe("The search query"),
+			}),
+		),
+		execute: async ({ query }) => {
+			await new Promise((resolve) => setTimeout(resolve, 1500)); // simulate network
+			return {
+				query,
+				results: [
+					{
+						title: `Result 1 for ${query}`,
+						url: "https://example.com/1",
+						snippet:
+							"This is a highly relevant snippet from the web about your query.",
+					},
+					{
+						title: `Result 2 for ${query}`,
+						url: "https://example.com/2",
+						snippet: "Another interesting finding that provides more context.",
+					},
+					{
+						title: `Related topic to ${query}`,
+						url: "https://example.com/3",
+						snippet:
+							"This page contains background information that might be useful.",
+					},
+				],
+			};
+		},
+	}),
 };
 
 // ── Assistant-UI wire format types ───────────────────────────────────────────
@@ -265,9 +322,22 @@ app.post("/api/chat", async (c) => {
 				"X-OpenRouter-Categories": c.env.SITE_CATEGORIES,
 			},
 			fetch: async (url, options) => {
-				// Inject OpenRouter-formatted messages
+				// INVARIANT: streamText() is called with a single placeholder message
+				// [{ role: "user", content: "." }]. We replace that placeholder with
+				// the real OpenRouter-formatted conversation, preserving any messages
+				// the SDK appends in multi-step tool loops (assistant + tool results).
 				const body = JSON.parse((options as RequestInit).body as string);
-				body.messages = openRouterMessages;
+				if (
+					!Array.isArray(body.messages) ||
+					body.messages.length < 1 ||
+					body.messages[0]?.content !== "."
+				) {
+					console.warn(
+						"[Worker] Placeholder invariant violated — SDK may have changed internal message format",
+						JSON.stringify(body.messages?.[0]),
+					);
+				}
+				body.messages.splice(0, 1, ...openRouterMessages);
 				const raw = await fetch(url as string, {
 					...(options as RequestInit),
 					body: JSON.stringify(body),
