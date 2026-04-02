@@ -80,12 +80,6 @@ const AssistantActionBar: FC = () => (
 
 const UserMessage: FC = () => (
 	<MessagePrimitive.Root className="ml-auto flex max-w-[85%] flex-col items-end mb-6 group">
-		<div className="flex items-center gap-2 mb-2">
-			<span className="text-xs font-medium text-zinc-500">你</span>
-			<div className="h-6 w-6 rounded-full bg-gradient-to-tr from-orange-400 to-amber-600 flex items-center justify-center text-white shadow-md dark:shadow-lg">
-				<User className="w-3.5 h-3.5" />
-			</div>
-		</div>
 		<div className="relative rounded-3xl rounded-tr-sm bg-gradient-to-br from-zinc-100 to-zinc-200 dark:from-zinc-800 dark:to-zinc-900 px-6 py-4 text-zinc-900 dark:text-zinc-100 shadow-xl dark:shadow-2xl border border-zinc-300/50 dark:border-white/5 backdrop-blur-xl">
 			<div className="leading-relaxed whitespace-pre-wrap text-sm flex flex-col gap-2">
 				<MessagePrimitive.Parts />
