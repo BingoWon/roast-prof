@@ -15,9 +15,12 @@ import { useAISDKRuntime } from "@assistant-ui/react-ai-sdk";
 import {
 	Bot,
 	Check,
+	CheckCircle,
 	ChevronDown,
 	ChevronLeft,
 	ChevronRight,
+	Circle,
+	Clock,
 	Copy,
 	Paperclip,
 	RefreshCw,
@@ -26,20 +29,68 @@ import {
 	User,
 	Wrench,
 	X,
-	Zap,
+	XCircle,
 } from "lucide-react";
-import { type FC, useState } from "react";
+import { type FC, useEffect, useRef, useState } from "react";
 
 // ── Reasoning Part ────────────────────────────────────────────────────────────
+// Auto-opens when streaming starts, auto-closes 1s after streaming ends,
+// tracks "Thought for N seconds" duration.
+
+const AUTO_CLOSE_DELAY = 1000;
 
 const ReasoningPart: FC = () => {
 	const reasoning = useMessagePartReasoning();
+	const isStreaming = reasoning?.status?.type === "running";
+
+	// open/close state
 	const [open, setOpen] = useState(false);
+	const [hasAutoClosed, setHasAutoClosed] = useState(false);
+	const hasEverStreamedRef = useRef(false);
+
+	// duration tracking
+	const startTimeRef = useRef<number | null>(null);
+	const [duration, setDuration] = useState<number | undefined>(undefined);
+
 	const [copied, setCopied] = useState(false);
+
+	// Track streaming start time + compute duration on finish
+	useEffect(() => {
+		if (isStreaming) {
+			hasEverStreamedRef.current = true;
+			if (startTimeRef.current === null) {
+				startTimeRef.current = Date.now();
+			}
+		} else if (startTimeRef.current !== null) {
+			const secs = Math.ceil((Date.now() - startTimeRef.current) / 1000);
+			setDuration(secs);
+			startTimeRef.current = null;
+		}
+	}, [isStreaming]);
+
+	// Auto-open when streaming starts
+	useEffect(() => {
+		if (isStreaming && !open) setOpen(true);
+	}, [isStreaming, open]);
+
+	// Auto-close 1s after streaming ends (once only)
+	useEffect(() => {
+		if (hasEverStreamedRef.current && !isStreaming && open && !hasAutoClosed) {
+			const timer = setTimeout(() => {
+				setOpen(false);
+				setHasAutoClosed(true);
+			}, AUTO_CLOSE_DELAY);
+			return () => clearTimeout(timer);
+		}
+	}, [isStreaming, open, hasAutoClosed]);
 
 	if (!reasoning?.text) return null;
 
-	const isStreaming = reasoning.status?.type === "running";
+	const headerLabel = isStreaming
+		? "Thinking…"
+		: duration !== undefined
+			? `Thought for ${duration}s`
+			: "Reasoning";
 
 	const handleCopy = () => {
 		navigator.clipboard.writeText(reasoning.text ?? "");
@@ -65,9 +116,9 @@ const ReasoningPart: FC = () => {
 					)}
 				</span>
 				<span className="text-[11px] font-semibold text-violet-400/80 tracking-widest uppercase select-none">
-					{isStreaming ? "Thinking…" : "Reasoning"}
+					{headerLabel}
 				</span>
-				{!isStreaming && reasoning.text && (
+				{!isStreaming && !open && reasoning.text && (
 					<span className="ml-1 text-[10px] text-violet-500/40 truncate max-w-[200px] hidden sm:block">
 						{reasoning.text.slice(0, 60).replace(/\n/g, " ")}…
 					</span>
@@ -79,7 +130,13 @@ const ReasoningPart: FC = () => {
 
 			{open && (
 				<div className="border-t border-violet-500/10">
-					<div className="relative max-h-72 overflow-y-auto px-4 py-3 scrollbar-thin scrollbar-thumb-violet-500/20">
+					<div
+						className="relative max-h-72 overflow-y-auto px-4 py-3"
+						ref={(el) => {
+							// Auto-scroll to bottom while streaming
+							if (el && isStreaming) el.scrollTop = el.scrollHeight;
+						}}
+					>
 						<p className="text-[11px] leading-relaxed text-violet-300/60 font-mono whitespace-pre-wrap">
 							{reasoning.text}
 						</p>
@@ -118,6 +175,41 @@ const TextPart: FC = () => {
 
 // ── Tool Call Part ────────────────────────────────────────────────────────────
 // Registered as tools.Fallback — receives ToolCallMessagePartProps directly as FC props
+// Status states mirror vercel/chatbot's tool.tsx: pending → running → done/error
+
+type ToolStatus = "pending" | "running" | "done" | "error";
+
+function getToolStatus(hasResult: boolean, isError: boolean): ToolStatus {
+	if (isError) return "error";
+	if (hasResult) return "done";
+	return "running";
+}
+
+const toolStatusConfig: Record<
+	ToolStatus,
+	{ label: string; icon: FC<{ className?: string }>; colors: string }
+> = {
+	pending: {
+		label: "Pending",
+		icon: Circle,
+		colors: "text-zinc-400 border-zinc-500/20 bg-zinc-900/60",
+	},
+	running: {
+		label: "Running",
+		icon: Clock,
+		colors: "text-amber-400 border-amber-500/20 bg-amber-950/20",
+	},
+	done: {
+		label: "Done",
+		icon: CheckCircle,
+		colors: "text-green-400 border-green-500/20 bg-green-950/20",
+	},
+	error: {
+		label: "Error",
+		icon: XCircle,
+		colors: "text-red-400 border-red-500/20 bg-red-950/20",
+	},
+};
 
 const ToolCallPart: FC<ToolCallMessagePartProps> = ({
 	toolName,
@@ -127,37 +219,35 @@ const ToolCallPart: FC<ToolCallMessagePartProps> = ({
 	isError,
 }) => {
 	const [open, setOpen] = useState(true);
-
 	const hasResult = result !== undefined;
-	const statusColor = isError
-		? "text-red-400 border-red-500/20 bg-red-950/20"
-		: hasResult
-			? "text-green-400 border-green-500/20 bg-green-950/20"
-			: "text-amber-400 border-amber-500/20 bg-amber-950/20";
+	const status = getToolStatus(hasResult, isError === true);
+	const { label, icon: StatusIcon, colors } = toolStatusConfig[status];
+	const isRunning = status === "running";
 
 	return (
 		<div
-			className={`mb-2 rounded-2xl border overflow-hidden transition-all duration-200 ${statusColor}`}
+			className={`mb-2 rounded-2xl border overflow-hidden transition-all duration-200 ${colors}`}
 		>
 			<button
 				type="button"
 				onClick={() => setOpen((v) => !v)}
 				className="flex w-full items-center gap-2.5 px-4 py-2.5 text-left hover:bg-white/5 transition-colors"
 			>
-				<Wrench className="h-3.5 w-3.5 shrink-0" />
+				<Wrench className="h-3.5 w-3.5 shrink-0 text-current/60" />
 				<span className="text-[11px] font-semibold tracking-wider uppercase select-none">
 					{toolName}
 				</span>
-				{isError && <span className="ml-1 text-[10px] opacity-60">Error</span>}
-				{hasResult && !isError && (
-					<span className="ml-1 text-[10px] opacity-50">Done</span>
-				)}
-				{!hasResult && !isError && (
-					<span className="ml-1 flex items-center gap-1 text-[10px] opacity-60">
-						<span className="animate-pulse">Running</span>
-						<Zap className="h-2.5 w-2.5 animate-pulse" />
+				{/* Status badge */}
+				<span className="ml-1.5 flex items-center gap-1 rounded-full border border-current/20 bg-current/5 px-2 py-0.5">
+					<StatusIcon
+						className={`h-2.5 w-2.5 ${isRunning ? "animate-pulse" : ""}`}
+					/>
+					<span
+						className={`text-[9px] font-semibold tracking-widest uppercase ${isRunning ? "animate-pulse" : ""}`}
+					>
+						{label}
 					</span>
-				)}
+				</span>
 				<ChevronDown
 					className={`ml-auto h-3 w-3 opacity-40 transition-transform duration-200 ${open ? "rotate-180" : ""}`}
 				/>
@@ -165,22 +255,22 @@ const ToolCallPart: FC<ToolCallMessagePartProps> = ({
 
 			{open && (
 				<div className="border-t border-current/10 divide-y divide-current/10">
-					{(args || argsText) && (
+					{(args !== undefined || argsText) && (
 						<div className="px-4 py-3">
-							<div className="text-[10px] opacity-50 uppercase tracking-widest mb-1.5">
-								Args
+							<div className="text-[10px] font-semibold opacity-40 uppercase tracking-widest mb-1.5">
+								Parameters
 							</div>
-							<pre className="text-[11px] opacity-70 font-mono whitespace-pre-wrap break-all">
+							<pre className="text-[11px] opacity-70 font-mono whitespace-pre-wrap break-all bg-black/20 rounded-lg px-3 py-2">
 								{argsText || JSON.stringify(args, null, 2)}
 							</pre>
 						</div>
 					)}
 					{result !== undefined && (
 						<div className="px-4 py-3">
-							<div className="text-[10px] opacity-50 uppercase tracking-widest mb-1.5">
-								Result
+							<div className="text-[10px] font-semibold opacity-40 uppercase tracking-widest mb-1.5">
+								{isError ? "Error" : "Result"}
 							</div>
-							<pre className="text-[11px] opacity-70 font-mono whitespace-pre-wrap break-all">
+							<pre className="text-[11px] opacity-70 font-mono whitespace-pre-wrap break-all bg-black/20 rounded-lg px-3 py-2">
 								{typeof result === "string"
 									? result
 									: JSON.stringify(result, null, 2)}
