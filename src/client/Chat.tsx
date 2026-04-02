@@ -9,6 +9,7 @@ import {
 	ThreadPrimitive,
 } from "@assistant-ui/react";
 import { useAISDKRuntime } from "@assistant-ui/react-ai-sdk";
+import { DefaultChatTransport } from "ai";
 import {
 	Bot,
 	ChevronDown,
@@ -22,7 +23,7 @@ import {
 	User,
 	X,
 } from "lucide-react";
-import { type FC, useRef } from "react";
+import { type FC, useMemo, useRef } from "react";
 import { EmptyState } from "./components/EmptyState";
 import { ReasoningPart } from "./components/message/ReasoningPart";
 import { TextPart } from "./components/message/TextPart";
@@ -194,19 +195,27 @@ export function Chat({
 	const onTitleRef = useRef(onTitleUpdate);
 	onTitleRef.current = onTitleUpdate;
 
+	const transport = useMemo(
+		() =>
+			new DefaultChatTransport({
+				api: "/api/chat",
+				headers: { "x-thread-id": threadId },
+			}),
+		[threadId],
+	);
+
 	const chat = useChat({
-		api: "/api/chat",
 		id: threadId,
-		initialMessages,
-		maxSteps: 5,
-		headers: { "x-thread-id": threadId },
-		onData: (part: { type: string; data?: unknown }) => {
-			if (part.type === "data-title-delta" && typeof part.data === "string") {
-				titleBuf.current += part.data;
+		transport,
+		messages: initialMessages,
+		onData: (part) => {
+			const p = part as { type: string; data?: unknown };
+			if (p.type === "data-title-delta" && typeof p.data === "string") {
+				titleBuf.current += p.data;
 				onTitleRef.current?.(titleBuf.current);
 			}
 		},
-	} as Parameters<typeof useChat>[0]);
+	});
 
 	const runtime = useAISDKRuntime(chat);
 
