@@ -196,7 +196,7 @@ export function Chat({
 		initialMessages,
 		maxSteps: 5,
 		body: { threadId },
-	} as any);
+	} as Parameters<typeof useChat>[0]);
 
 	// Auto-generate title from first user message (new threads only)
 	const titleDone = useRef(initialMessages.length > 0);

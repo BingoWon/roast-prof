@@ -1,5 +1,6 @@
 import type { UIMessage as Message } from "@ai-sdk/react";
 import { Show, SignInButton, SignUpButton, UserButton } from "@clerk/react";
+import { Loader2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Chat } from "./Chat";
 import { ThemeToggle } from "./components/ThemeToggle";
@@ -14,6 +15,7 @@ function App() {
 		createThread,
 		deleteThread,
 		updateThreadTitle,
+		loading,
 	} = useThreads();
 
 	const [initialMessages, setInitialMessages] = useState<Message[]>([]);
@@ -39,12 +41,19 @@ function App() {
 
 	return (
 		<main className="h-screen w-screen bg-zinc-50 dark:bg-[#09090b] text-zinc-900 dark:text-zinc-100 overflow-hidden font-sans selection:bg-blue-500/30 flex transition-colors duration-300">
+			<header className="absolute top-0 right-0 p-4 z-50 flex items-center justify-end gap-3">
+				<ThemeToggle />
+				<Show when="signed-in">
+					<UserButton />
+				</Show>
+			</header>
+
 			<Show when="signed-out">
 				<div className="flex-1 flex flex-col items-center justify-center p-8 text-center h-full w-full">
 					<div className="max-w-md w-full space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
-						<div className="w-16 h-16 bg-blue-500/10 dark:bg-blue-500/20 text-blue-500 dark:text-blue-400 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-sm ring-1 ring-blue-500/20">
+						<div className="w-20 h-20 bg-blue-500/10 dark:bg-blue-500/20 text-blue-500 dark:text-blue-400 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-sm ring-1 ring-blue-500/20">
 							<svg
-								className="w-8 h-8"
+								className="w-10 h-10"
 								fill="none"
 								viewBox="0 0 24 24"
 								stroke="currentColor"
@@ -62,7 +71,7 @@ function App() {
 						<h1 className="text-4xl font-bold tracking-tight text-zinc-900 dark:text-zinc-100">
 							AI 沙盒
 						</h1>
-						<p className="text-zinc-500 dark:text-zinc-400 text-lg">
+						<p className="text-zinc-500 dark:text-zinc-400 text-lg leading-relaxed">
 							您的智能助手，准备就绪。登录以保存您的对话历史并体验所有高级功能。
 						</p>
 
@@ -88,13 +97,6 @@ function App() {
 				</div>
 			</Show>
 
-			<header className="absolute top-0 right-0 p-4 z-50 flex items-center justify-end gap-3">
-				<ThemeToggle />
-				<Show when="signed-in">
-					<UserButton />
-				</Show>
-			</header>
-
 			<Show when="signed-in">
 				<ThreadListSidebar
 					threads={threads}
@@ -104,7 +106,12 @@ function App() {
 					onDelete={deleteThread}
 				/>
 				<div className="flex-1 relative h-full">
-					{activeThreadId && chatReady && (
+					{loading && (
+						<div className="absolute inset-0 flex items-center justify-center">
+							<Loader2 className="w-6 h-6 text-zinc-400 animate-spin" />
+						</div>
+					)}
+					{!loading && activeThreadId && chatReady && (
 						<Chat
 							key={activeThreadId}
 							threadId={activeThreadId}
@@ -114,28 +121,6 @@ function App() {
 							}
 						/>
 					)}
-				</div>
-			</Show>
-
-			<Show when="signed-out">
-				<div className="flex-1 flex flex-col items-center justify-center text-center px-4 h-full">
-					<div className="mb-8 w-24 h-24 rounded-3xl bg-zinc-200 dark:bg-zinc-900 border border-zinc-300 dark:border-white/5 flex items-center justify-center shadow-2xl ring-1 ring-black/5 dark:ring-white/10">
-						<span className="text-4xl text-zinc-500">🔒</span>
-					</div>
-					<h1 className="text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-br from-zinc-800 to-zinc-500 dark:from-white dark:to-zinc-500 mb-3 tracking-tight">
-						需要身份验证
-					</h1>
-					<p className="text-zinc-500 dark:text-zinc-400 max-w-sm text-sm leading-relaxed mb-8">
-						请登录以访问 AI 沙盒，并开始体验生成式智能交互。
-					</p>
-					<SignInButton mode="modal">
-						<button
-							type="button"
-							className="px-6 py-3 text-sm font-bold bg-zinc-900 text-white dark:bg-white dark:text-black hover:opacity-90 rounded-full transition cursor-pointer shadow-lg"
-						>
-							点击登录继续
-						</button>
-					</SignInButton>
 				</div>
 			</Show>
 		</main>

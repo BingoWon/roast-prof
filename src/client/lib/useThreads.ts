@@ -59,7 +59,6 @@ export function useThreads() {
 		};
 	}, [userId]);
 
-	// Auto-select first thread when active is cleared
 	useEffect(() => {
 		if (activeThreadId === null && threads.length > 0 && !loading) {
 			setActiveThreadId(threads[0].id);
@@ -76,9 +75,20 @@ export function useThreads() {
 	}, []);
 
 	const deleteThread = useCallback(async (id: string) => {
-		await fetch(`/api/threads/${id}`, { method: "DELETE" });
 		setActiveThreadId((prev) => (prev === id ? null : prev));
 		setThreads((prev) => prev.filter((t) => t.id !== id));
+
+		try {
+			const res = await fetch(`/api/threads/${id}`, { method: "DELETE" });
+			if (!res.ok) throw new Error();
+		} catch {
+			const res = await fetch("/api/threads");
+			if (res.ok) {
+				const data: Thread[] = await res.json();
+				setThreads(data);
+				if (data.length > 0) setActiveThreadId(data[0].id);
+			}
+		}
 	}, []);
 
 	const updateThreadTitle = useCallback((id: string, title: string) => {
