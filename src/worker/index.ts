@@ -11,7 +11,6 @@ import { Hono } from "hono";
 import { getUserId } from "./auth";
 import {
 	createDb,
-	createThread as dbCreateThread,
 	deleteThread as dbDeleteThread,
 	updateThreadTitle as dbUpdateThreadTitle,
 	ensureThread,
@@ -53,13 +52,6 @@ app.get("/api/threads", async (c) => {
 	return c.json(await getThreadsByUserId(db, userId));
 });
 
-app.post("/api/threads", async (c) => {
-	const userId = getUserId(c);
-	if (!userId) return c.json({ error: "未授权" }, 401);
-	const db = createDb(c.env.DB);
-	return c.json(await dbCreateThread(db, userId), 201);
-});
-
 app.patch("/api/threads/:id", async (c) => {
 	const userId = getUserId(c);
 	if (!userId) return c.json({ error: "未授权" }, 401);
@@ -84,15 +76,7 @@ app.get("/api/threads/:id/messages", async (c) => {
 	const thread = await getThread(db, c.req.param("id"));
 	if (!thread || thread.userId !== userId) return c.json([], 200);
 	const rows = await getMessagesByThreadId(db, c.req.param("id"));
-	const result = rows.map((r) => ({
-		id: r.id,
-		role: r.role,
-		parts: r.parts,
-	}));
-	console.log(
-		`[Worker] GET messages thread=${c.req.param("id")} → ${result.length} msgs`,
-	);
-	return c.json(result);
+	return c.json(rows.map((r) => ({ id: r.id, role: r.role, parts: r.parts })));
 });
 
 // ── Health ────────────────────────────────────────────────────────────────────
@@ -108,10 +92,6 @@ app.post("/api/chat", async (c) => {
 		}>();
 		const threadId = c.req.header("x-thread-id") || undefined;
 		const userId = getUserId(c);
-
-		console.log(
-			`[Worker] POST /api/chat threadId=${threadId ?? "NONE"} userId=${userId ?? "NONE"} msgs=${messages?.length}`,
-		);
 
 		if (!c.env.API_KEY) return c.json({ error: "缺少 API_KEY 配置" }, 500);
 		if (!c.env.MODEL) return c.json({ error: "缺少 MODEL 配置" }, 500);
@@ -149,13 +129,6 @@ app.post("/api/chat", async (c) => {
 		// ── Build LLM request ────────────────────────────────────────────────
 		const systemPrompt = c.env.SYSTEM_PROMPT || DEFAULT_SYSTEM_PROMPT;
 		const openRouterMessages = buildOpenRouterMessages(messages, systemPrompt);
-
-		const isMultimodal = messages.some((m) =>
-			m.parts?.some((p) => p.type !== "text"),
-		);
-		console.log(
-			`[Worker] ${messages.length} msgs → ${model} (multimodal: ${isMultimodal})`,
-		);
 
 		const provider = createOpenAI({
 			baseURL: c.env.BASE_URL,

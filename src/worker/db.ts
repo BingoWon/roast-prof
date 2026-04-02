@@ -23,15 +23,6 @@ export async function getThreadsByUserId(db: DbClient, userId: string) {
 		.orderBy(desc(threads.updatedAt));
 }
 
-export async function createThread(db: DbClient, userId: string) {
-	const id = crypto.randomUUID();
-	const now = Math.floor(Date.now() / 1000);
-	await db
-		.insert(threads)
-		.values({ id, userId, title: "新对话", createdAt: now, updatedAt: now });
-	return { id, title: "新对话", createdAt: now, updatedAt: now };
-}
-
 export async function ensureThread(db: DbClient, id: string, userId: string) {
 	const now = Math.floor(Date.now() / 1000);
 	await db

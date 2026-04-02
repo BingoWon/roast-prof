@@ -118,16 +118,6 @@ export function useThreads() {
 		[setThreadTitle],
 	);
 
-	const refreshThreads = useCallback(async () => {
-		const data = await fetchThreads();
-		setThreads((prev) => {
-			const drafts = prev.filter(
-				(t) => t.title === "新对话" && !data.some((d) => d.id === t.id),
-			);
-			return [...drafts, ...data];
-		});
-	}, [fetchThreads]);
-
 	return {
 		threads,
 		activeThreadId,
@@ -137,7 +127,6 @@ export function useThreads() {
 		deleteThread,
 		setThreadTitle,
 		updateThreadTitle,
-		refreshThreads,
 		loading,
 	};
 }
