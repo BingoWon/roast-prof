@@ -14,6 +14,12 @@ export function useThreads() {
 	const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
 	const [loading, setLoading] = useState(true);
 
+	const fetchThreads = useCallback(async () => {
+		const res = await fetch("/api/threads");
+		if (res.ok) return (await res.json()) as Thread[];
+		return [];
+	}, []);
+
 	useEffect(() => {
 		if (userId === undefined) return;
 		if (!userId) {
@@ -28,9 +34,8 @@ export function useThreads() {
 
 		(async () => {
 			try {
-				const res = await fetch("/api/threads");
+				const data = await fetchThreads();
 				if (cancelled) return;
-				const data: Thread[] = res.ok ? await res.json() : [];
 
 				if (data.length === 0) {
 					const createRes = await fetch("/api/threads", { method: "POST" });
@@ -57,7 +62,7 @@ export function useThreads() {
 		return () => {
 			cancelled = true;
 		};
-	}, [userId]);
+	}, [userId, fetchThreads]);
 
 	useEffect(() => {
 		if (activeThreadId === null && threads.length > 0 && !loading) {
@@ -100,6 +105,11 @@ export function useThreads() {
 		}).catch(console.error);
 	}, []);
 
+	const refreshThreads = useCallback(async () => {
+		const data = await fetchThreads();
+		setThreads(data);
+	}, [fetchThreads]);
+
 	return {
 		threads,
 		activeThreadId,
@@ -108,6 +118,7 @@ export function useThreads() {
 		createThread,
 		deleteThread,
 		updateThreadTitle,
+		refreshThreads,
 		loading,
 	};
 }

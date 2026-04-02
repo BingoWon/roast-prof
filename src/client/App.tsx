@@ -1,7 +1,7 @@
 import type { UIMessage as Message } from "@ai-sdk/react";
 import { Show, SignInButton, SignUpButton, UserButton } from "@clerk/react";
 import { Loader2 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Chat } from "./Chat";
 import { ThemeToggle } from "./components/ThemeToggle";
 import { ThreadListSidebar } from "./components/ThreadListSidebar";
@@ -15,6 +15,7 @@ function App() {
 		createThread,
 		deleteThread,
 		updateThreadTitle,
+		refreshThreads,
 		loading,
 	} = useThreads();
 
@@ -26,18 +27,32 @@ function App() {
 			setChatReady(false);
 			return;
 		}
+		let cancelled = false;
 		setChatReady(false);
 		fetch(`/api/threads/${activeThreadId}/messages`)
 			.then((res) => (res.ok ? res.json() : []))
 			.then((msgs: unknown) => {
-				setInitialMessages(msgs as Message[]);
+				if (cancelled) return;
+				const parsed = Array.isArray(msgs) ? (msgs as Message[]) : [];
+				console.log(
+					`[App] loaded ${parsed.length} messages for thread ${activeThreadId}`,
+				);
+				setInitialMessages(parsed);
 				setChatReady(true);
 			})
 			.catch(() => {
+				if (cancelled) return;
 				setInitialMessages([]);
 				setChatReady(true);
 			});
+		return () => {
+			cancelled = true;
+		};
 	}, [activeThreadId]);
+
+	const handleChatFinish = useCallback(() => {
+		setTimeout(() => refreshThreads(), 1500);
+	}, [refreshThreads]);
 
 	return (
 		<main className="h-screen w-screen bg-zinc-50 dark:bg-[#09090b] text-zinc-900 dark:text-zinc-100 overflow-hidden font-sans selection:bg-blue-500/30 flex transition-colors duration-300">
@@ -113,12 +128,10 @@ function App() {
 					)}
 					{!loading && activeThreadId && chatReady && (
 						<Chat
-							key={activeThreadId}
+							key={`${activeThreadId}-${initialMessages.length}`}
 							threadId={activeThreadId}
 							initialMessages={initialMessages}
-							onTitleGenerated={(title) =>
-								updateThreadTitle(activeThreadId, title)
-							}
+							onChatFinish={handleChatFinish}
 						/>
 					)}
 				</div>

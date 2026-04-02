@@ -3,6 +3,7 @@ import {
 	createUIMessageStream,
 	createUIMessageStreamResponse,
 	extractReasoningMiddleware,
+	generateText,
 	stepCountIs,
 	streamText,
 	wrapLanguageModel,
@@ -84,7 +85,15 @@ app.get("/api/threads/:id/messages", async (c) => {
 	const thread = await getThread(db, c.req.param("id"));
 	if (!thread || thread.userId !== userId) return c.json([], 200);
 	const rows = await getMessagesByThreadId(db, c.req.param("id"));
-	return c.json(rows.map((r) => ({ id: r.id, role: r.role, parts: r.parts })));
+	const result = rows.map((r) => ({
+		id: r.id,
+		role: r.role,
+		parts: r.parts,
+	}));
+	console.log(
+		`[Worker] GET /api/threads/${c.req.param("id")}/messages → ${result.length} msgs`,
+	);
+	return c.json(result);
 });
 
 // ── Health ────────────────────────────────────────────────────────────────────
@@ -106,6 +115,11 @@ app.post("/api/chat", async (c) => {
 		if (!c.env.MODEL) return c.json({ error: "缺少 MODEL 配置" }, 500);
 
 		const db = createDb(c.env.DB);
+		const model = c.env.MODEL;
+
+		console.log(
+			`[Worker] POST /api/chat threadId=${threadId} userId=${userId ? "yes" : "no"} msgs=${messages.length}`,
+		);
 
 		// ── Persist user message ──────────────────────────────────────────────
 		if (threadId && userId) {
@@ -137,7 +151,6 @@ app.post("/api/chat", async (c) => {
 		// ── Build LLM request ────────────────────────────────────────────────
 		const systemPrompt = c.env.SYSTEM_PROMPT || DEFAULT_SYSTEM_PROMPT;
 		const openRouterMessages = buildOpenRouterMessages(messages, systemPrompt);
-		const model = c.env.MODEL;
 
 		const isMultimodal = messages.some((m) =>
 			m.parts?.some((p) => p.type !== "text"),
@@ -215,6 +228,48 @@ app.post("/api/chat", async (c) => {
 								})),
 							);
 							await touchThread(db, threadId);
+							console.log(
+								`[Worker] saved ${assistantMsgs.length} assistant msg(s) for thread ${threadId}`,
+							);
+						}
+
+						// ── AI title generation ──────────────────────────────
+						const thread = await getThread(db, threadId);
+						if (thread?.title === "新对话") {
+							try {
+								const firstUserText = messages
+									.filter((m) => m.role === "user")
+									.flatMap((m) =>
+										(m.parts ?? [])
+											.filter(
+												(p): p is { type: "text"; text: string } =>
+													p.type === "text",
+											)
+											.map((p) => p.text),
+									)
+									.join(" ")
+									.slice(0, 200);
+
+								if (firstUserText) {
+									const titleProvider = createOpenAI({
+										baseURL: c.env.BASE_URL,
+										apiKey: c.env.API_KEY,
+									});
+									const { text: title } = await generateText({
+										model: titleProvider.chat(model),
+										prompt: `请为以下用户消息生成一个简洁的中文对话标题（4-10个字，不加标点符号和引号）：\n"${firstUserText}"\n只回复标题本身。`,
+									});
+									const cleaned = title.trim().replace(/["""'']/g, "");
+									if (cleaned) {
+										await dbUpdateThreadTitle(db, threadId, userId, cleaned);
+										console.log(
+											`[Worker] generated title: "${cleaned}" for thread ${threadId}`,
+										);
+									}
+								}
+							} catch (e) {
+								console.error("[Worker] title generation failed:", e);
+							}
 						}
 					}
 				} catch (e) {

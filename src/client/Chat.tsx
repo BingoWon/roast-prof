@@ -22,7 +22,7 @@ import {
 	User,
 	X,
 } from "lucide-react";
-import { type FC, useEffect, useRef } from "react";
+import type { FC } from "react";
 import { EmptyState } from "./components/EmptyState";
 import { ReasoningPart } from "./components/message/ReasoningPart";
 import { TextPart } from "./components/message/TextPart";
@@ -184,11 +184,11 @@ const AssistantMessage: FC = () => (
 export function Chat({
 	threadId,
 	initialMessages,
-	onTitleGenerated,
+	onChatFinish,
 }: {
 	threadId: string;
 	initialMessages: Message[];
-	onTitleGenerated?: (title: string) => void;
+	onChatFinish?: () => void;
 }) {
 	const chat = useChat({
 		api: "/api/chat",
@@ -196,22 +196,10 @@ export function Chat({
 		initialMessages,
 		maxSteps: 5,
 		body: { threadId },
+		onFinish: () => {
+			onChatFinish?.();
+		},
 	} as Parameters<typeof useChat>[0]);
-
-	// Auto-generate title from first user message (new threads only)
-	const titleDone = useRef(initialMessages.length > 0);
-	useEffect(() => {
-		if (titleDone.current || !onTitleGenerated) return;
-		const firstUser = chat.messages.find((m) => m.role === "user");
-		if (!firstUser) return;
-		let text = "";
-		const tp = firstUser.parts.find((p) => p.type === "text");
-		if (tp && "text" in tp) text = tp.text;
-		if (text) {
-			onTitleGenerated(text.slice(0, 20) + (text.length > 20 ? "..." : ""));
-			titleDone.current = true;
-		}
-	}, [chat.messages, onTitleGenerated]);
 
 	const runtime = useAISDKRuntime(chat);
 
