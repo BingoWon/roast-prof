@@ -14,7 +14,6 @@ function App() {
 		setActiveThreadId,
 		createThread,
 		deleteThread,
-		updateThreadTitle,
 		refreshThreads,
 		loading,
 	} = useThreads();

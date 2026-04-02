@@ -8,6 +8,16 @@ export interface Thread {
 	updatedAt: number;
 }
 
+function makeDraftThread(): Thread {
+	const now = Math.floor(Date.now() / 1000);
+	return {
+		id: crypto.randomUUID(),
+		title: "新对话",
+		createdAt: now,
+		updatedAt: now,
+	};
+}
+
 export function useThreads() {
 	const { userId } = useAuth();
 	const [threads, setThreads] = useState<Thread[]>([]);
@@ -38,13 +48,9 @@ export function useThreads() {
 				if (cancelled) return;
 
 				if (data.length === 0) {
-					const createRes = await fetch("/api/threads", { method: "POST" });
-					if (cancelled) return;
-					if (createRes.ok) {
-						const thread: Thread = await createRes.json();
-						setThreads([thread]);
-						setActiveThreadId(thread.id);
-					}
+					const draft = makeDraftThread();
+					setThreads([draft]);
+					setActiveThreadId(draft.id);
 				} else {
 					setThreads(data);
 					setActiveThreadId(data[0].id);
@@ -70,31 +76,31 @@ export function useThreads() {
 		}
 	}, [activeThreadId, threads, loading]);
 
-	const createThread = useCallback(async () => {
-		const res = await fetch("/api/threads", { method: "POST" });
-		if (!res.ok) throw new Error("创建会话失败");
-		const thread: Thread = await res.json();
-		setThreads((prev) => [thread, ...prev]);
-		setActiveThreadId(thread.id);
-		return thread;
+	const createThread = useCallback(() => {
+		const draft = makeDraftThread();
+		setThreads((prev) => {
+			const withoutEmptyDrafts = prev.filter((t) => t.title !== "新对话");
+			return [draft, ...withoutEmptyDrafts];
+		});
+		setActiveThreadId(draft.id);
 	}, []);
 
-	const deleteThread = useCallback(async (id: string) => {
-		setActiveThreadId((prev) => (prev === id ? null : prev));
-		setThreads((prev) => prev.filter((t) => t.id !== id));
+	const deleteThread = useCallback(
+		async (id: string) => {
+			setActiveThreadId((prev) => (prev === id ? null : prev));
+			setThreads((prev) => prev.filter((t) => t.id !== id));
 
-		try {
-			const res = await fetch(`/api/threads/${id}`, { method: "DELETE" });
-			if (!res.ok) throw new Error();
-		} catch {
-			const res = await fetch("/api/threads");
-			if (res.ok) {
-				const data: Thread[] = await res.json();
+			try {
+				const res = await fetch(`/api/threads/${id}`, { method: "DELETE" });
+				if (!res.ok) throw new Error();
+			} catch {
+				const data = await fetchThreads();
 				setThreads(data);
 				if (data.length > 0) setActiveThreadId(data[0].id);
 			}
-		}
-	}, []);
+		},
+		[fetchThreads],
+	);
 
 	const updateThreadTitle = useCallback((id: string, title: string) => {
 		setThreads((prev) => prev.map((t) => (t.id === id ? { ...t, title } : t)));
@@ -102,12 +108,17 @@ export function useThreads() {
 			method: "PATCH",
 			headers: { "Content-Type": "application/json" },
 			body: JSON.stringify({ title }),
-		}).catch(console.error);
+		}).catch(() => {});
 	}, []);
 
 	const refreshThreads = useCallback(async () => {
 		const data = await fetchThreads();
-		setThreads(data);
+		setThreads((prev) => {
+			const drafts = prev.filter(
+				(t) => t.title === "新对话" && !data.some((d) => d.id === t.id),
+			);
+			return [...drafts, ...data];
+		});
 	}, [fetchThreads]);
 
 	return {
