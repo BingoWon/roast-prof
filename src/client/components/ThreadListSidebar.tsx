@@ -100,6 +100,17 @@ export const ThreadListSidebar: FC<{
 
 // ── Papers Panel ──────────────────────────────────────────────────────────────
 
+function timeAgo(unixSeconds: number): string {
+	const diff = Math.floor(Date.now() / 1000) - unixSeconds;
+	if (diff < 60) return "刚刚";
+	if (diff < 3600) return `${Math.floor(diff / 60)} 分钟前`;
+	if (diff < 86400) return `${Math.floor(diff / 3600)} 小时前`;
+	if (diff < 604800) return `${Math.floor(diff / 86400)} 天前`;
+	if (diff < 2592000) return `${Math.floor(diff / 604800)} 周前`;
+	const d = new Date(unixSeconds * 1000);
+	return `${d.getFullYear()}/${String(d.getMonth() + 1).padStart(2, "0")}/${String(d.getDate()).padStart(2, "0")}`;
+}
+
 interface Paper {
 	id: string;
 	title: string;
@@ -224,12 +235,13 @@ const PapersPanel: FC<{
 					>
 						<div className="flex items-center gap-2 overflow-hidden min-w-0">
 							<FileText className="w-4 h-4 text-zinc-400 shrink-0" />
-							<div className="min-w-0">
+							<div className="min-w-0 flex-1">
 								<div className="truncate text-zinc-700 dark:text-zinc-300 font-medium">
 									{p.title}
 								</div>
-								<div className="text-[10px] text-zinc-400 dark:text-zinc-600">
-									{p.chunks} 个片段
+								<div className="flex items-center justify-between text-[10px] text-zinc-400 dark:text-zinc-600">
+									<span>{p.chunks} 个片段</span>
+									<span>{timeAgo(p.createdAt)}</span>
 								</div>
 							</div>
 						</div>
