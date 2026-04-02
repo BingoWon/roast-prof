@@ -54,14 +54,17 @@ export async function ingestMarkdown(
 	const ids = chunks.map(() => crypto.randomUUID());
 	const now = Math.floor(Date.now() / 1000);
 
-	await opts.db.insert(documents).values(
-		chunks.map((content, i) => ({
-			id: ids[i],
-			content,
-			source: opts.source ?? null,
-			createdAt: now,
-		})),
-	);
+	const rows = chunks.map((content, i) => ({
+		id: ids[i],
+		content,
+		source: opts.source ?? null,
+		createdAt: now,
+	}));
+
+	const BATCH = 20;
+	for (let i = 0; i < rows.length; i += BATCH) {
+		await opts.db.insert(documents).values(rows.slice(i, i + BATCH));
+	}
 
 	const embeddings = createEmbeddings(opts.env);
 	const store = createVectorStore(opts.vectorize, embeddings);

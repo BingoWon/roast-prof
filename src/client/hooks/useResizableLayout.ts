@@ -2,6 +2,7 @@ import {
 	type RefObject,
 	useCallback,
 	useEffect,
+	useLayoutEffect,
 	useRef,
 	useState,
 } from "react";
@@ -33,11 +34,21 @@ export function useResizableLayout(
 		return { left: Math.round(w / 6), right: Math.round((w * 2) / 6) };
 	}, [containerRef]);
 
-	useEffect(() => {
-		const d = computeDefaults();
-		defaultsRef.current = d;
-		setLeftWidth(d.left);
-		setRightWidth(d.right);
+	// biome-ignore lint/correctness/useExhaustiveDependencies: measure on mount only
+	useLayoutEffect(() => {
+		const el = containerRef.current;
+		if (!el) return;
+		const measure = () => {
+			const d = computeDefaults();
+			defaultsRef.current = d;
+			setLeftWidth(d.left);
+			setRightWidth(d.right);
+		};
+		if (el.offsetWidth > 0) {
+			measure();
+		} else {
+			requestAnimationFrame(measure);
+		}
 	}, [computeDefaults]);
 
 	useEffect(() => {
