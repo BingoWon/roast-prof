@@ -309,20 +309,20 @@ const AssistantMessage: FC = () => (
 	<MessagePrimitive.Root className="mr-auto flex max-w-[85%] flex-col items-start mb-6 group">
 		{/* Avatar + name */}
 		<div className="flex items-center gap-2 mb-2">
-			<div className="relative h-6 w-6 rounded-full bg-gradient-to-tr from-red-500 to-rose-700 flex items-center justify-center text-white shadow-lg shadow-red-500/20">
+			<div className="relative h-6 w-6 rounded-full bg-zinc-800 border border-white/10 flex items-center justify-center text-zinc-300 shadow-lg">
 				<Bot className="w-3.5 h-3.5" />
 				{/* Live indicator — visible when this message is last & thread is running */}
 				<MessagePrimitive.If last>
 					<ThreadPrimitive.If running>
 						<span className="absolute -right-0.5 -top-0.5 flex h-2 w-2">
-							<span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-orange-400 opacity-75" />
-							<span className="relative inline-flex rounded-full h-2 w-2 bg-orange-500" />
+							<span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75" />
+							<span className="relative inline-flex rounded-full h-2 w-2 bg-blue-500" />
 						</span>
 					</ThreadPrimitive.If>
 				</MessagePrimitive.If>
 			</div>
-			<span className="text-xs font-bold text-red-500 tracking-wide uppercase">
-				暴躁教授
+			<span className="text-xs font-semibold text-zinc-400 tracking-wider">
+				AI Agent
 			</span>
 		</div>
 
@@ -346,16 +346,15 @@ const AssistantMessage: FC = () => (
 
 const EmptyState: FC = () => (
 	<div className="absolute inset-0 flex flex-col items-center justify-center text-center px-4 animate-in fade-in duration-700 pointer-events-none select-none">
-		<div className="w-20 h-20 mb-6 rounded-3xl bg-gradient-to-tr from-red-500 to-orange-500 flex items-center justify-center shadow-2xl shadow-red-500/20 pointer-events-none">
-			<Bot className="w-10 h-10 text-white" />
+		<div className="w-20 h-20 mb-6 rounded-3xl bg-zinc-900 border border-white/5 flex items-center justify-center shadow-2xl pointer-events-none ring-1 ring-white/10">
+			<Bot className="w-10 h-10 text-zinc-400" />
 		</div>
-		<h2 className="text-3xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-zinc-100 to-zinc-500 mb-3 tracking-tight">
-			我是暴躁教授
+		<h2 className="text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-br from-white to-zinc-500 mb-3 tracking-tight">
+			AI Playground
 		</h2>
 		<p className="text-zinc-500 max-w-sm mx-auto text-sm leading-relaxed mb-8">
-			少废话，直接来。丢给我问题、图片、文件、音频、视频都行。
-			<br />
-			<span className="text-zinc-600">别指望我给你好脸色。</span>
+			Test and validate language models, tools, reasoning capabilities, and
+			multimodal handling in a modern UI framework.
 		</p>
 		{/* Feature badges */}
 		<div className="flex flex-wrap items-center justify-center gap-2 max-w-xs">
@@ -407,9 +406,9 @@ export function Chat() {
 
 	return (
 		<AssistantRuntimeProvider runtime={runtime}>
-			<div className="flex h-full w-full flex-col bg-zinc-950 relative overflow-hidden">
+			<div className="flex h-full w-full flex-col bg-[#09090b] relative overflow-hidden font-sans">
 				{/* Ambient glow */}
-				<div className="absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-2xl h-72 bg-orange-500/4 rounded-full blur-[120px] pointer-events-none" />
+				<div className="absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-3xl h-96 bg-blue-500/5 rounded-full blur-[120px] pointer-events-none" />
 
 				<ThreadPrimitive.Root className="flex flex-col h-full w-full max-w-3xl mx-auto relative z-10">
 					{/* Messages viewport */}
@@ -459,7 +458,7 @@ export function Chat() {
 									<ComposerPrimitive.Send asChild>
 										<button
 											type="submit"
-											className="flex h-10 w-12 items-center justify-center rounded-full bg-gradient-to-r from-orange-500 to-red-600 text-white shadow-lg shadow-orange-500/20 transition-all hover:scale-105 hover:shadow-orange-500/30 active:scale-95 disabled:opacity-40 disabled:grayscale disabled:hover:scale-100"
+											className="flex h-10 w-12 items-center justify-center rounded-full bg-zinc-100 text-zinc-900 shadow-md transition-all hover:scale-105 active:scale-95 disabled:opacity-40 disabled:hover:scale-100"
 										>
 											<Send className="h-4 w-4 ml-0.5" />
 										</button>
@@ -467,13 +466,6 @@ export function Chat() {
 								</div>
 							</div>
 						</ComposerPrimitive.Root>
-
-						{/* Caption */}
-						<div className="text-center mt-3">
-							<span className="text-[10px] font-medium text-zinc-700 uppercase tracking-widest">
-								Powered by AG-UI · Xiaomi Mimo Omni · OpenRouter
-							</span>
-						</div>
 					</ThreadPrimitive.ViewportFooter>
 				</ThreadPrimitive.Root>
 			</div>
