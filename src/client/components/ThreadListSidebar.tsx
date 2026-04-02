@@ -1,6 +1,16 @@
-import { Check, MessageSquare, Pencil, Plus, X } from "lucide-react";
+import {
+	BookOpen,
+	Brain,
+	Check,
+	MessageSquare,
+	Pencil,
+	Plus,
+	X,
+} from "lucide-react";
 import { type FC, useEffect, useRef, useState } from "react";
 import type { Thread } from "../lib/useThreads";
+
+export type SidebarTab = "chat" | "rag" | "memory";
 
 export const ThreadListSidebar: FC<{
 	threads: Thread[];
@@ -9,35 +19,105 @@ export const ThreadListSidebar: FC<{
 	onCreate: () => void;
 	onDelete: (id: string) => void;
 	onRename: (id: string, title: string) => void;
-}> = ({ threads, activeThreadId, onSelect, onCreate, onDelete, onRename }) => {
+	activeTab: SidebarTab;
+	onTabChange: (tab: SidebarTab) => void;
+}> = ({
+	threads,
+	activeThreadId,
+	onSelect,
+	onCreate,
+	onDelete,
+	onRename,
+	activeTab,
+	onTabChange,
+}) => {
 	return (
 		<div className="w-1/6 min-w-[200px] h-full bg-zinc-50 dark:bg-zinc-950 flex flex-col border-r border-zinc-200 dark:border-white/5 transition-all flex-shrink-0 z-40 relative">
-			<div className="p-3">
-				<button
-					type="button"
-					onClick={onCreate}
-					className="flex items-center gap-2 w-full rounded-xl hover:bg-zinc-100 dark:hover:bg-zinc-900 text-zinc-900 dark:text-zinc-100 text-sm font-medium px-3 py-2.5 transition border border-transparent hover:border-zinc-300 dark:hover:border-zinc-800 cursor-pointer"
-				>
-					<Plus className="w-4 h-4 text-zinc-500 dark:text-zinc-400" />
-					开启新对话
-				</button>
-			</div>
-
-			<div className="flex-1 overflow-y-auto px-2 pb-4 flex flex-col gap-1">
-				{threads.map((t) => (
-					<ThreadListItem
-						key={t.id}
-						title={t.title}
-						isActive={t.id === activeThreadId}
-						onClick={() => onSelect(t.id)}
-						onDelete={(e) => {
-							e.stopPropagation();
-							onDelete(t.id);
-						}}
-						onRename={(title) => onRename(t.id, title)}
-					/>
+			{/* Tab 切换 */}
+			<div className="flex border-b border-zinc-200 dark:border-zinc-800">
+				{(
+					[
+						{ id: "chat", label: "对话", icon: MessageSquare },
+						{ id: "rag", label: "论文", icon: BookOpen },
+						{ id: "memory", label: "记忆", icon: Brain },
+					] as const
+				).map((tab) => (
+					<button
+						key={tab.id}
+						type="button"
+						onClick={() => onTabChange(tab.id)}
+						className={`flex-1 flex items-center justify-center gap-1.5 px-2 py-3 text-xs font-medium transition cursor-pointer ${
+							activeTab === tab.id
+								? "text-zinc-900 dark:text-zinc-100 border-b-2 border-zinc-900 dark:border-zinc-100"
+								: "text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-400"
+						}`}
+					>
+						<tab.icon className="w-3.5 h-3.5" />
+						{tab.label}
+					</button>
 				))}
 			</div>
+
+			{/* Tab 内容 */}
+			{activeTab === "chat" && (
+				<>
+					<div className="p-3">
+						<button
+							type="button"
+							onClick={onCreate}
+							className="flex items-center gap-2 w-full rounded-xl hover:bg-zinc-100 dark:hover:bg-zinc-900 text-zinc-900 dark:text-zinc-100 text-sm font-medium px-3 py-2.5 transition border border-transparent hover:border-zinc-300 dark:hover:border-zinc-800 cursor-pointer"
+						>
+							<Plus className="w-4 h-4 text-zinc-500 dark:text-zinc-400" />
+							开启新对话
+						</button>
+					</div>
+					<div className="flex-1 overflow-y-auto px-2 pb-4 flex flex-col gap-1">
+						{threads.map((t) => (
+							<ThreadListItem
+								key={t.id}
+								title={t.title}
+								isActive={t.id === activeThreadId}
+								onClick={() => onSelect(t.id)}
+								onDelete={(e) => {
+									e.stopPropagation();
+									onDelete(t.id);
+								}}
+								onRename={(title) => onRename(t.id, title)}
+							/>
+						))}
+					</div>
+				</>
+			)}
+
+			{activeTab === "rag" && (
+				<div className="flex-1 flex flex-col items-center justify-center px-4 text-center">
+					<BookOpen className="w-10 h-10 text-zinc-300 dark:text-zinc-700 mb-3" />
+					<h3 className="text-sm font-semibold text-zinc-500 dark:text-zinc-400 mb-1">
+						论文 / RAG
+					</h3>
+					<p className="text-xs text-zinc-400 dark:text-zinc-500 leading-relaxed">
+						上传文档，AI 将基于文档内容进行语义检索和问答
+					</p>
+					<p className="text-[10px] text-zinc-300 dark:text-zinc-600 mt-3">
+						Cloudflare Vectorize
+					</p>
+				</div>
+			)}
+
+			{activeTab === "memory" && (
+				<div className="flex-1 flex flex-col items-center justify-center px-4 text-center">
+					<Brain className="w-10 h-10 text-zinc-300 dark:text-zinc-700 mb-3" />
+					<h3 className="text-sm font-semibold text-zinc-500 dark:text-zinc-400 mb-1">
+						记忆 / Memory
+					</h3>
+					<p className="text-xs text-zinc-400 dark:text-zinc-500 leading-relaxed">
+						AI 的长期记忆，跨对话记住用户偏好和上下文
+					</p>
+					<p className="text-[10px] text-zinc-300 dark:text-zinc-600 mt-3">
+						Mastra Memory
+					</p>
+				</div>
+			)}
 		</div>
 	);
 };

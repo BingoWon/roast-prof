@@ -9,7 +9,10 @@ import {
 	RecipePanel,
 } from "./components/RecipePanel";
 import { ThemeToggle } from "./components/ThemeToggle";
-import { ThreadListSidebar } from "./components/ThreadListSidebar";
+import {
+	type SidebarTab,
+	ThreadListSidebar,
+} from "./components/ThreadListSidebar";
 import { useThreads } from "./lib/useThreads";
 
 function App() {
@@ -29,6 +32,7 @@ function App() {
 	const [recipe, setRecipe] = useState<Recipe>(INITIAL_RECIPE);
 	const [changedKeys, setChangedKeys] = useState<string[]>([]);
 	const [isAiLoading, setIsAiLoading] = useState(false);
+	const [sidebarTab, setSidebarTab] = useState<SidebarTab>("chat");
 	const improveRef = useRef<(() => void) | null>(null);
 
 	useEffect(() => {
@@ -141,6 +145,8 @@ function App() {
 					onCreate={createThread}
 					onDelete={deleteThread}
 					onRename={updateThreadTitle}
+					activeTab={sidebarTab}
+					onTabChange={setSidebarTab}
 				/>
 
 				{/* 中间食谱面板 3/6 */}
