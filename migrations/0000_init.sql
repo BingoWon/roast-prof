@@ -15,5 +15,12 @@ CREATE TABLE `messages` (
 	FOREIGN KEY (`thread_id`) REFERENCES `threads`(`id`) ON UPDATE no action ON DELETE cascade
 );
 
+CREATE TABLE `documents` (
+	`id` text PRIMARY KEY NOT NULL,
+	`content` text NOT NULL,
+	`source` text,
+	`created_at` integer DEFAULT (strftime('%s', 'now')) NOT NULL
+);
+
 CREATE INDEX `idx_threads_user_id` ON `threads` (`user_id`);
 CREATE INDEX `idx_messages_thread_id` ON `messages` (`thread_id`);

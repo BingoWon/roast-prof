@@ -8,8 +8,11 @@ compatibility_flags = ["nodejs_compat"]
 [[d1_databases]]
 binding = "DB"
 database_name = "ai-playground-db"
-database_id = "00000000-0000-0000-0000-000000000000"
+database_id = "a4e119fc-1852-4e94-841a-fa58246fd817"
 
+[[vectorize]]
+binding = "VECTORIZE"
+index_name = "knowledge-index"
 
 [placement]
 mode = "smart"
@@ -22,13 +25,13 @@ binding = "ASSETS"
 enabled = true
 head_sampling_rate = 1
 
-# Runtime vars — set real values via `wrangler secret put` or CF dashboard for production.
-# For local dev, override in .dev.vars (git-ignored).
 [vars]
 BASE_URL = "https://openrouter.ai/api/v1"
 MODEL = ""
+EMBEDDING_BASE_URL = ""
+EMBEDDING_API_KEY = ""
+EMBEDDING_MODEL = ""
 SYSTEM_PROMPT = ""
 SITE_URL = ""
 SITE_NAME = ""
 SITE_CATEGORIES = ""
-# API_KEY must be set as a secret: `wrangler secret put API_KEY`

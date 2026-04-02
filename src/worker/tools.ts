@@ -60,21 +60,19 @@ export const tools = {
 				query,
 				results: [
 					{
-						title: `Result 1 for ${query}`,
+						title: `关于「${query}」的搜索结果 1`,
 						url: "https://example.com/1",
-						snippet:
-							"This is a highly relevant snippet from the web about your query.",
+						snippet: "这是与您查询高度相关的网页摘要信息。",
 					},
 					{
-						title: `Result 2 for ${query}`,
+						title: `关于「${query}」的搜索结果 2`,
 						url: "https://example.com/2",
-						snippet: "Another interesting finding that provides more context.",
+						snippet: "另一条提供更多上下文的有用信息。",
 					},
 					{
-						title: `Related topic to ${query}`,
+						title: `「${query}」相关话题`,
 						url: "https://example.com/3",
-						snippet:
-							"This page contains background information that might be useful.",
+						snippet: "该页面包含可能对您有帮助的背景信息。",
 					},
 				],
 			};

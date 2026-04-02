@@ -24,3 +24,12 @@ export const messages = sqliteTable("messages", {
 		.notNull()
 		.default(sql`(strftime('%s', 'now'))`),
 });
+
+export const documents = sqliteTable("documents", {
+	id: text("id").primaryKey(),
+	content: text("content").notNull(),
+	source: text("source"),
+	createdAt: integer("created_at", { mode: "number" })
+		.notNull()
+		.default(sql`(strftime('%s', 'now'))`),
+});
