@@ -233,8 +233,8 @@ app.post("/api/chat", async (c) => {
 								apiKey: c.env.API_KEY,
 							});
 							const titleResult = streamText({
-								model: titleProvider.chat(model),
-								prompt: `请为以下用户消息生成一个简洁的中文对话标题（4-8个字，不加标点符号和引号）：\n"${firstUserText}"\n只回复标题本身。`,
+								model: titleProvider.chat("google/gemini-2.0-flash-lite-001"),
+								prompt: `为以下用户消息生成简洁中文标题，4-8个字，无标点无引号，只回复标题：\n${firstUserText}`,
 							});
 
 							let fullTitle = "";
@@ -246,7 +246,9 @@ app.post("/api/chat", async (c) => {
 								});
 							}
 
-							const cleaned = fullTitle.trim().replace(/["""''「」『』]/g, "");
+							const cleaned = fullTitle
+								.trim()
+								.replace(/["""''「」『』。，！？、：；]/g, "");
 							if (cleaned) {
 								await dbUpdateThreadTitle(db, threadId, userId, cleaned);
 							}
