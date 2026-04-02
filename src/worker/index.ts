@@ -103,12 +103,15 @@ app.get("/api/health", (c) => c.json({ status: "ok" }));
 
 app.post("/api/chat", async (c) => {
 	try {
-		const body = await c.req.json<{
+		const { messages } = await c.req.json<{
 			messages: ChatRequestMessage[];
-			threadId?: string;
 		}>();
-		const { messages, threadId } = body;
+		const threadId = c.req.header("x-thread-id") || undefined;
 		const userId = getUserId(c);
+
+		console.log(
+			`[Worker] POST /api/chat threadId=${threadId ?? "NONE"} userId=${userId ?? "NONE"} msgs=${messages?.length}`,
+		);
 
 		if (!c.env.API_KEY) return c.json({ error: "缺少 API_KEY 配置" }, 500);
 		if (!c.env.MODEL) return c.json({ error: "缺少 MODEL 配置" }, 500);

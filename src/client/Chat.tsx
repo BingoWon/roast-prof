@@ -199,7 +199,7 @@ export function Chat({
 		id: threadId,
 		initialMessages,
 		maxSteps: 5,
-		body: { threadId },
+		headers: { "x-thread-id": threadId },
 		onData: (part: { type: string; data?: unknown }) => {
 			if (part.type === "data-title-delta" && typeof part.data === "string") {
 				titleBuf.current += part.data;
