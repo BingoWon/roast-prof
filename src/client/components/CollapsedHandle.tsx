@@ -13,7 +13,7 @@ export const CollapsedHandle: FC<{
 				type="button"
 				onClick={onClick}
 				className={`absolute top-1/2 -translate-y-1/2 z-20 flex items-center justify-center
-					w-[16px] h-[48px] transition-all duration-200
+					w-[24px] h-[64px] transition-all duration-200
 					bg-zinc-100 dark:bg-zinc-900 hover:bg-zinc-200 dark:hover:bg-zinc-800
 					text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300
 					shadow-md hover:shadow-lg cursor-pointer
@@ -21,9 +21,9 @@ export const CollapsedHandle: FC<{
 				title={isLeft ? "展开侧边栏" : "展开聊天面板"}
 			>
 				{isLeft ? (
-					<ChevronRight className="w-3 h-3" />
+					<ChevronRight className="w-4 h-4" />
 				) : (
-					<ChevronLeft className="w-3 h-3" />
+					<ChevronLeft className="w-4 h-4" />
 				)}
 			</button>
 		</div>
