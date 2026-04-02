@@ -4,22 +4,28 @@ import type { FC } from "react";
 export const CollapsedHandle: FC<{
 	direction: "left" | "right";
 	onClick: () => void;
-}> = ({ direction, onClick }) => (
-	<button
-		type="button"
-		onClick={onClick}
-		className="w-[16px] h-full flex-shrink-0 flex items-center justify-center bg-zinc-50 dark:bg-zinc-950 hover:bg-zinc-100 dark:hover:bg-zinc-900 border-zinc-200 dark:border-zinc-800 transition-colors cursor-pointer group"
-		style={{
-			borderLeftWidth: direction === "right" ? 1 : 0,
-			borderRightWidth: direction === "left" ? 1 : 0,
-			borderStyle: "solid",
-		}}
-		title={direction === "left" ? "展开侧边栏" : "展开聊天面板"}
-	>
-		{direction === "left" ? (
-			<ChevronRight className="w-3 h-3 text-zinc-400 group-hover:text-zinc-600 dark:group-hover:text-zinc-300 transition-colors" />
-		) : (
-			<ChevronLeft className="w-3 h-3 text-zinc-400 group-hover:text-zinc-600 dark:group-hover:text-zinc-300 transition-colors" />
-		)}
-	</button>
-);
+}> = ({ direction, onClick }) => {
+	const isLeft = direction === "left";
+
+	return (
+		<div className="relative h-full flex-shrink-0 w-0">
+			<button
+				type="button"
+				onClick={onClick}
+				className={`absolute top-1/2 -translate-y-1/2 z-20 flex items-center justify-center
+					w-[16px] h-[48px] transition-all duration-200
+					bg-zinc-100 dark:bg-zinc-900 hover:bg-zinc-200 dark:hover:bg-zinc-800
+					text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300
+					shadow-md hover:shadow-lg cursor-pointer
+					${isLeft ? "left-0 rounded-r-full border-r border-y border-zinc-300 dark:border-zinc-700" : "right-0 rounded-l-full border-l border-y border-zinc-300 dark:border-zinc-700"}`}
+				title={isLeft ? "展开侧边栏" : "展开聊天面板"}
+			>
+				{isLeft ? (
+					<ChevronRight className="w-3 h-3" />
+				) : (
+					<ChevronLeft className="w-3 h-3" />
+				)}
+			</button>
+		</div>
+	);
+};
