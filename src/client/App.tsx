@@ -1,6 +1,6 @@
 import type { UIMessage as Message } from "@ai-sdk/react";
 import { Show, SignInButton, SignUpButton, UserButton } from "@clerk/react";
-import { ChefHat, FileText, Loader2 } from "lucide-react";
+import { ChefHat, FileText, Globe, Languages, Loader2 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Chat } from "./Chat";
 import { CollapsedHandle } from "./components/CollapsedHandle";
@@ -46,6 +46,7 @@ function App() {
 		title: string;
 		lang?: string | null;
 	} | null>(null);
+	const [viewLang, setViewLang] = useState<"original" | "zh">("zh");
 	const improveRef = useRef<(() => void) | null>(null);
 	const containerRef = useRef<HTMLDivElement>(null);
 	const layout = useResizableLayout(containerRef);
@@ -173,6 +174,7 @@ function App() {
 							<ThreadListSidebar
 								threads={threads}
 								activeThreadId={activeThreadId}
+								activePaperId={selectedPaper?.id ?? null}
 								onSelect={setActiveThreadId}
 								onCreate={createThread}
 								onDelete={deleteThread}
@@ -189,32 +191,60 @@ function App() {
 
 					{/* 中间面板（tab 切换） */}
 					<div className="flex-1 h-full flex flex-col min-w-0">
-						{/* iPad 风格 tab bar */}
-						<div className="flex items-center gap-1 px-4 pt-3 pb-2 border-b border-zinc-200 dark:border-zinc-800 bg-white/50 dark:bg-zinc-950/50 backdrop-blur-sm flex-shrink-0">
-							<button
-								type="button"
-								onClick={() => setCenterTab("recipe")}
-								className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer ${
-									centerTab === "recipe"
-										? "bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 shadow-sm"
-										: "text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800"
-								}`}
-							>
-								<ChefHat className="w-3.5 h-3.5" />
-								食谱
-							</button>
-							{selectedPaper && (
+						{/* Tab bar */}
+						<div className="flex items-center justify-between px-4 pt-3 pb-2 border-b border-zinc-200 dark:border-zinc-800 bg-white/50 dark:bg-zinc-950/50 backdrop-blur-sm flex-shrink-0">
+							<div className="flex items-center gap-1">
 								<button
 									type="button"
-									onClick={() => setCenterTab("paper")}
-									className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer max-w-[200px] ${
-										centerTab === "paper"
+									onClick={() => setCenterTab("recipe")}
+									className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer ${
+										centerTab === "recipe"
 											? "bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 shadow-sm"
 											: "text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800"
 									}`}
 								>
-									<FileText className="w-3.5 h-3.5 shrink-0" />
-									<span className="truncate">{selectedPaper.title}</span>
+									<ChefHat className="w-3.5 h-3.5" />
+									食谱
+								</button>
+								{selectedPaper && (
+									<button
+										type="button"
+										onClick={() => setCenterTab("paper")}
+										className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer max-w-[200px] ${
+											centerTab === "paper"
+												? "bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 shadow-sm"
+												: "text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+										}`}
+									>
+										<FileText className="w-3.5 h-3.5 shrink-0" />
+										<span className="truncate">{selectedPaper.title}</span>
+									</button>
+								)}
+							</div>
+
+							{/* Language toggle (English papers only) */}
+							{centerTab === "paper" && selectedPaper?.lang === "en" && (
+								<button
+									type="button"
+									onClick={() =>
+										setViewLang((v) => (v === "zh" ? "original" : "zh"))
+									}
+									className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition cursor-pointer"
+									title={
+										viewLang === "zh" ? "切换到英文原版" : "切换到中文翻译"
+									}
+								>
+									{viewLang === "zh" ? (
+										<>
+											<Languages className="w-3.5 h-3.5" />
+											中文
+										</>
+									) : (
+										<>
+											<Globe className="w-3.5 h-3.5" />
+											EN
+										</>
+									)}
 								</button>
 							)}
 						</div>
@@ -234,7 +264,7 @@ function App() {
 						{centerTab === "paper" && selectedPaper && (
 							<PaperViewer
 								paperId={selectedPaper.id}
-								lang={selectedPaper.lang}
+								viewLang={selectedPaper.lang === "en" ? viewLang : "original"}
 							/>
 						)}
 					</div>
