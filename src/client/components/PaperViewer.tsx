@@ -7,9 +7,9 @@ export const PaperViewer: FC<{
 	paperId: string;
 	lang?: string | null;
 }> = ({ paperId, lang }) => {
-	const isEnglish = lang === "en";
+	const hasTranslation = lang === "en";
 	const [viewLang, setViewLang] = useState<"original" | "zh">(
-		isEnglish ? "zh" : "original",
+		hasTranslation ? "zh" : "original",
 	);
 	const [markdown, setMarkdown] = useState<string | null>(null);
 	const [loading, setLoading] = useState(true);
@@ -21,7 +21,7 @@ export const PaperViewer: FC<{
 		setError(null);
 
 		const url =
-			viewLang === "zh" && isEnglish
+			hasTranslation && viewLang === "zh"
 				? `/api/papers/${paperId}/markdown?lang=zh`
 				: `/api/papers/${paperId}/markdown`;
 
@@ -46,59 +46,56 @@ export const PaperViewer: FC<{
 		return () => {
 			cancelled = true;
 		};
-	}, [paperId, viewLang, isEnglish]);
+	}, [paperId, viewLang, hasTranslation]);
+
+	const toggleLang = () => setViewLang((v) => (v === "zh" ? "original" : "zh"));
+
+	if (loading) {
+		return (
+			<div className="flex-1 flex items-center justify-center">
+				<Loader2 className="w-6 h-6 text-zinc-400 animate-spin" />
+			</div>
+		);
+	}
+
+	if (error) {
+		return (
+			<div className="flex-1 flex items-center justify-center text-zinc-500 text-sm">
+				{error}
+			</div>
+		);
+	}
 
 	return (
-		<div className="flex-1 flex flex-col overflow-hidden">
-			{/* Language toggle bar (only for English papers) */}
-			{isEnglish && (
-				<div className="flex items-center gap-1 px-4 py-2 border-b border-zinc-200 dark:border-zinc-800 bg-white/50 dark:bg-zinc-950/50 backdrop-blur-sm shrink-0">
-					<button
-						type="button"
-						onClick={() => setViewLang("zh")}
-						className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-medium transition cursor-pointer ${
-							viewLang === "zh"
-								? "bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900"
-								: "text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800"
-						}`}
-					>
-						<Languages className="w-3 h-3" />
-						中文翻译
-					</button>
-					<button
-						type="button"
-						onClick={() => setViewLang("original")}
-						className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-medium transition cursor-pointer ${
-							viewLang === "original"
-								? "bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900"
-								: "text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800"
-						}`}
-					>
-						<Globe className="w-3 h-3" />
-						英文原版
-					</button>
-				</div>
-			)}
-
-			{/* Content area */}
-			{loading ? (
-				<div className="flex-1 flex items-center justify-center">
-					<Loader2 className="w-6 h-6 text-zinc-400 animate-spin" />
-				</div>
-			) : error ? (
-				<div className="flex-1 flex items-center justify-center text-zinc-500 text-sm">
-					{error}
-				</div>
-			) : (
-				<div className="flex-1 overflow-y-auto px-8 py-6">
-					<div className="max-w-3xl mx-auto">
-						<div className="prose prose-sm prose-zinc dark:prose-invert max-w-none prose-p:leading-relaxed prose-headings:font-bold prose-pre:bg-zinc-100 dark:prose-pre:bg-zinc-900 prose-pre:border prose-pre:border-zinc-200 dark:prose-pre:border-zinc-800">
-							<ReactMarkdown remarkPlugins={[remarkGfm]}>
-								{markdown ?? ""}
-							</ReactMarkdown>
-						</div>
+		<div className="flex-1 relative overflow-y-auto">
+			{/* Content */}
+			<div className="px-8 py-6">
+				<div className="max-w-3xl mx-auto">
+					<div className="prose prose-sm prose-zinc dark:prose-invert max-w-none prose-p:leading-relaxed prose-headings:font-bold prose-pre:bg-zinc-100 dark:prose-pre:bg-zinc-900 prose-pre:border prose-pre:border-zinc-200 dark:prose-pre:border-zinc-800">
+						<ReactMarkdown remarkPlugins={[remarkGfm]}>
+							{markdown ?? ""}
+						</ReactMarkdown>
 					</div>
 				</div>
+			</div>
+
+			{/* Floating language toggle (English papers only) */}
+			{hasTranslation && (
+				<button
+					type="button"
+					onClick={toggleLang}
+					className="group fixed bottom-6 right-6 z-30 flex items-center gap-2 h-10 rounded-full bg-zinc-900/90 dark:bg-zinc-100/90 text-white dark:text-zinc-900 shadow-lg backdrop-blur-sm transition-all hover:pr-4 px-3 cursor-pointer"
+					title={viewLang === "zh" ? "切换到英文原版" : "切换到中文翻译"}
+				>
+					{viewLang === "zh" ? (
+						<Globe className="w-4 h-4 shrink-0" />
+					) : (
+						<Languages className="w-4 h-4 shrink-0" />
+					)}
+					<span className="max-w-0 overflow-hidden whitespace-nowrap text-xs font-medium transition-all group-hover:max-w-32">
+						{viewLang === "zh" ? "英文原版" : "中文翻译"}
+					</span>
+				</button>
 			)}
 		</div>
 	);

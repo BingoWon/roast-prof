@@ -177,26 +177,23 @@ export async function translateMarkdown(
 	};
 
 	for (const p of paragraphs) {
-		// Skip empty paragraphs
 		if (!p.trim()) {
 			translated.push("");
 			continue;
 		}
 
-		// If single paragraph exceeds limit, translate alone
 		if (p.length > CHUNK_LIMIT) {
 			await flushBatch();
-			try {
-				// Split long paragraphs by sentences
-				const result = await translateText(p.slice(0, CHUNK_LIMIT), env);
-				const rest =
-					p.length > CHUNK_LIMIT
-						? await translateText(p.slice(CHUNK_LIMIT), env)
-						: "";
-				translated.push(result + rest);
-			} catch {
-				translated.push(p);
+			// Split long paragraph into CHUNK_LIMIT-sized pieces
+			const parts: string[] = [];
+			for (let i = 0; i < p.length; i += CHUNK_LIMIT) {
+				try {
+					parts.push(await translateText(p.slice(i, i + CHUNK_LIMIT), env));
+				} catch {
+					parts.push(p.slice(i, i + CHUNK_LIMIT));
+				}
 			}
+			translated.push(parts.join(""));
 			continue;
 		}
 

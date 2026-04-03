@@ -378,55 +378,37 @@ const PapersPanel: FC<{
 
 // ── Progress Bar ─────────────────────────────────────────────────────────────
 
-const STEPS_ZH = ["上传", "解析", "分块", "嵌入"];
-const STEPS_EN = ["上传", "解析", "翻译", "分块", "嵌入"];
+const STEPS = ["上传", "解析", "翻译", "分块", "嵌入"];
+const STATUS_TO_STEP: Record<string, number> = {
+	uploading: 0,
+	parsing: 1,
+	translating: 2,
+	chunking: 3,
+	embedding: 4,
+};
 
-function getSteps(lang?: string | null): string[] {
-	return lang === "en" ? STEPS_EN : STEPS_ZH;
-}
-
-function stepIndex(status: string, lang?: string | null): number {
-	const map: Record<string, number> = {
-		uploading: 0,
-		parsing: 1,
-	};
-	if (lang === "en") {
-		map.translating = 2;
-		map.chunking = 3;
-		map.embedding = 4;
-	} else {
-		map.chunking = 2;
-		map.embedding = 3;
-	}
-	return map[status] ?? -1;
-}
-
-const ProgressBar: FC<{ status: string; lang?: string | null }> = ({
-	status,
-	lang,
-}) => {
-	const steps = getSteps(lang);
-	const active = stepIndex(status, lang);
+const ProgressBar: FC<{ status: string }> = ({ status }) => {
+	const active = STATUS_TO_STEP[status] ?? -1;
 
 	return (
-		<div className="flex items-center gap-1 mt-1 w-full">
-			{steps.map((label, i) => {
+		<div className="flex items-center mt-1 w-full">
+			{STEPS.map((label, i) => {
 				const done = i < active;
 				const current = i === active;
 				return (
-					<div key={label} className="flex items-center gap-1 flex-1 min-w-0">
+					<div key={label} className="flex items-center flex-1 min-w-0">
 						{i > 0 && (
 							<div
-								className={`h-px flex-1 ${done ? "bg-blue-400" : "bg-zinc-200 dark:bg-zinc-800"}`}
+								className={`h-px flex-1 mx-1 ${done ? "bg-emerald-400" : current ? "bg-blue-400" : "bg-zinc-200 dark:bg-zinc-800"}`}
 							/>
 						)}
 						<span
-							className={`text-[10px] whitespace-nowrap transition-colors ${
-								current
-									? "text-blue-500 dark:text-blue-400 font-semibold"
-									: done
-										? "text-emerald-500 dark:text-emerald-400"
-										: "text-zinc-400 dark:text-zinc-600"
+							className={`text-[10px] whitespace-nowrap ${
+								done
+									? "text-emerald-500 dark:text-emerald-400"
+									: current
+										? "text-blue-500 dark:text-blue-400 font-semibold"
+										: "text-zinc-300 dark:text-zinc-700"
 							}`}
 						>
 							{done ? "✓" : current ? "●" : "○"} {label}
@@ -579,7 +561,7 @@ const PaperListItem: FC<{
 					) : p.status === "failed" ? (
 						<div className="text-[10px] text-red-400">解析失败</div>
 					) : (
-						<ProgressBar status={p.status} lang={p.lang} />
+						<ProgressBar status={p.status} />
 					)}
 				</div>
 			</div>

@@ -191,10 +191,10 @@ export async function ingestPdf(
 	const lang = isChinese(markdown) ? "zh" : "en";
 	await db.update(papers).set({ lang }).where(eq(papers.id, paperId));
 
-	// Step 3 (conditional): Translate if English
+	// Step 3: Translate
+	onStatus("translating", { paperId, lang });
+	await setStatus("translating");
 	if (lang === "en" && opts.env.TMT_SECRET_ID && opts.env.TMT_SECRET_KEY) {
-		onStatus("translating", { paperId, lang });
-		await setStatus("translating");
 		try {
 			const translated = await translateMarkdown(markdown, {
 				TMT_SECRET_ID: opts.env.TMT_SECRET_ID,
@@ -208,6 +208,7 @@ export async function ingestPdf(
 				.where(eq(papers.id, paperId));
 		} catch (e) {
 			console.warn("[Translate] Failed, skipping:", (e as Error).message);
+			onStatus("translating", { paperId, lang, skipped: true });
 		}
 	}
 
