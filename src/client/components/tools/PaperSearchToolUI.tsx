@@ -1,5 +1,5 @@
 import type { ToolCallMessagePartProps } from "@assistant-ui/react";
-import { BookOpen, Loader2, Search, Sparkles } from "lucide-react";
+import { BookOpen, Loader2, Search, Sparkles, X } from "lucide-react";
 import { type FC, useContext, useState } from "react";
 import { AddToolResultCtx } from "../../Chat";
 
@@ -12,9 +12,28 @@ export const SuggestSearchToolUI: FC<ToolCallMessagePartProps> = ({
 }) => {
 	const a = args as { queries?: string[]; defaultTopK?: number };
 
-	// Already resolved
 	if (result) {
-		const r = result as { query: string; topK: number };
+		const r = result as {
+			action: string;
+			query?: string;
+			topK?: number;
+		};
+		if (r.action === "skip") {
+			return (
+				<div className="mb-3 flex items-center gap-2 text-xs text-zinc-500">
+					<X className="w-3.5 h-3.5" />
+					已跳过检索确认，由 AI 自主搜索
+				</div>
+			);
+		}
+		if (r.action === "auto") {
+			return (
+				<div className="mb-3 flex items-center gap-2 text-xs text-blue-500 dark:text-blue-400">
+					<Sparkles className="w-3.5 h-3.5" />
+					已委托 AI 选择最佳查询
+				</div>
+			);
+		}
 		return (
 			<div className="mb-3 flex items-center gap-2 text-xs text-emerald-600 dark:text-emerald-400">
 				<Search className="w-3.5 h-3.5" />
@@ -32,7 +51,7 @@ export const SuggestSearchToolUI: FC<ToolCallMessagePartProps> = ({
 	);
 };
 
-// ── Search Card (blocks agent until user confirms) ──────────────────────────
+// ── Search Card ─────────────────────────────────────────────────────────────
 
 const SearchCard: FC<{
 	toolCallId: string;
@@ -53,21 +72,11 @@ const SearchCard: FC<{
 
 	const canSubmit = !!activeQuery && activeQuery.length > 0;
 
-	const handleSubmit = () => {
-		if (!canSubmit || !addToolResult) return;
-		addToolResult({
+	const send = (output: Record<string, unknown>) => {
+		addToolResult?.({
 			tool: "rag_suggest",
 			toolCallId,
-			output: { query: activeQuery, topK },
-		});
-	};
-
-	const handleAutoSelect = () => {
-		if (!addToolResult) return;
-		addToolResult({
-			tool: "rag_suggest",
-			toolCallId,
-			output: { query: queries[0] ?? "", topK },
+			output,
 		});
 	};
 
@@ -77,7 +86,7 @@ const SearchCard: FC<{
 			<div className="flex items-center justify-between px-4 py-3 border-b border-zinc-100/60 dark:border-zinc-700/40">
 				<div className="flex items-center gap-2 text-sm font-medium text-zinc-800 dark:text-zinc-200">
 					<BookOpen className="w-4 h-4 text-blue-500" />
-					资料 RAG 检索
+					RAG 资料检索
 				</div>
 				<span className="text-[10px] px-2 py-0.5 rounded-full bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400">
 					等待确认
@@ -146,11 +155,17 @@ const SearchCard: FC<{
 				/>
 			</div>
 
-			{/* Actions */}
+			{/* Actions: 3 buttons */}
 			<div className="flex items-center gap-2 px-4 py-3 border-t border-zinc-100/60 dark:border-zinc-700/40">
 				<button
 					type="button"
-					onClick={handleAutoSelect}
+					onClick={() =>
+						send({
+							action: "auto",
+							message:
+								"用户选择了「帮我选择」，请你自行决定最佳查询和参数来执行 rag_search。",
+						})
+					}
 					className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition cursor-pointer"
 				>
 					<Sparkles className="w-3 h-3" />
@@ -169,9 +184,33 @@ const SearchCard: FC<{
 					<Search className="w-3 h-3" />
 					确认搜索
 				</button>
+				<button
+					type="button"
+					onClick={() =>
+						send({
+							action: "skip",
+							message:
+								"用户选择了「不要问我」，今后直接执行 rag_search 无需再调用 rag_suggest。",
+						})
+					}
+					className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium text-zinc-400 dark:text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition cursor-pointer"
+				>
+					<X className="w-3 h-3" />
+					不要问我
+				</button>
 			</div>
 		</div>
 	);
+
+	function handleSubmit() {
+		if (!canSubmit) return;
+		send({
+			action: "confirm",
+			query: activeQuery,
+			topK,
+			message: `用户确认使用查询「${activeQuery}」检索 ${topK} 条结果。请调用 rag_search 执行检索。`,
+		});
+	}
 };
 
 // ── Search Execution Result ─────────────────────────────────────────────────
@@ -200,7 +239,7 @@ export const PaperSearchToolUI: FC<ToolCallMessagePartProps> = ({
 		<div className="mb-2 flex items-center gap-2 text-xs text-emerald-600 dark:text-emerald-400">
 			<BookOpen className="w-3.5 h-3.5 shrink-0" />
 			{hasContext
-				? `已从 ${r.papers ?? 0} 篇资料中检索到相关内容`
+				? `已从 ${r.papers ?? 0} 份资料中检索到相关内容`
 				: r.message || "未找到相关内容"}
 		</div>
 	);
