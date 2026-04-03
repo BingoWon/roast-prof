@@ -3,6 +3,8 @@
  * Uses TC3-HMAC-SHA256 signing, compatible with Cloudflare Workers (Web Crypto).
  */
 
+import { log } from "./log";
+
 const TMT_HOST = "tmt.tencentcloudapi.com";
 const TMT_VERSION = "2018-03-21";
 const CHUNK_LIMIT = 1800; // chars per API call (leave margin from 2000 limit)
@@ -170,7 +172,11 @@ export async function translateMarkdown(
 			const result = await translateText(joined, env);
 			translated.push(result);
 		} catch (e) {
-			console.warn("[Translate] Batch failed, keeping original:", e);
+			log.warn({
+				module: "translate",
+				msg: "batch failed, keeping original",
+				error: String(e),
+			});
 			translated.push(joined);
 		}
 		batch = [];

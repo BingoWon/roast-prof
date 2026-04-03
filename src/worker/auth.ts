@@ -1,3 +1,5 @@
+import { log } from "./log";
+
 /**
  * Clerk JWT verification with optional JWKS signature validation.
  *
@@ -86,9 +88,10 @@ export async function getUserId(
 			);
 			if (!valid) return null;
 		} else {
-			console.warn(
-				"[Auth] CLERK_JWKS_URL not set — skipping JWT signature verification",
-			);
+			log.warn({
+				module: "auth",
+				msg: "CLERK_JWKS_URL not set, skipping JWT verification",
+			});
 		}
 
 		return payload.sub ?? null;

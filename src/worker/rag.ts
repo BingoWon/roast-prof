@@ -5,6 +5,7 @@ import { MarkdownTextSplitter } from "@langchain/textsplitters";
 import { and, desc, eq, inArray } from "drizzle-orm";
 import mammoth from "mammoth";
 import type { DbClient } from "./db";
+import { log } from "./log";
 import { documents, papers, userPapers } from "./schema";
 import { isChinese, translateMarkdown } from "./translate";
 
@@ -283,7 +284,11 @@ export async function ingestFile(
 				.set({ translatedR2Key })
 				.where(eq(papers.id, paperId));
 		} catch (e) {
-			console.warn("[Translate] Failed, skipping:", (e as Error).message);
+			log.warn({
+				module: "rag",
+				msg: "translation failed, skipping",
+				error: (e as Error).message,
+			});
 			onStatus("translating", { paperId, lang, skipped: true });
 		}
 	}
@@ -335,7 +340,11 @@ export async function ingestFile(
 	try {
 		await store.addDocuments(docs, { ids });
 	} catch (e) {
-		console.warn("[RAG] Vectorize skipped:", (e as Error).message);
+		log.warn({
+			module: "rag",
+			msg: "vectorize skipped",
+			error: (e as Error).message,
+		});
 	}
 
 	// Done

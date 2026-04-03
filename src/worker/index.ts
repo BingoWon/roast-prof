@@ -19,6 +19,7 @@ import {
 	touchThread,
 	updateThreadTitle,
 } from "./db";
+import { log } from "./log";
 import { createModel, createTitleModel, SYSTEM_PROMPT } from "./model";
 import {
 	checkPaperByHash,
@@ -150,7 +151,7 @@ app.post("/api/papers", async (c) => {
 				});
 			} catch (e) {
 				const msg = e instanceof Error ? e.message : "处理失败";
-				console.error("[Worker] ingest paper:", msg);
+				log.error({ module: "ingest", msg, paperId: ingestPaperId });
 				// Mark paper as failed in DB so it doesn't stay stuck
 				if (ingestPaperId) {
 					await db
@@ -258,10 +259,12 @@ app.post("/api/papers/:id/generate-title", async (c) => {
 	if (!md) return c.json({ error: "未找到" }, 404);
 
 	const excerpt = md.slice(0, 500);
-	const hints: string[] = [];
-	if (fileName) hints.push(`文件名：${fileName}`);
-	if (fileExt) hints.push(`格式：${fileExt}`);
-	const hintStr = hints.length > 0 ? `\n参考信息：${hints.join("，")}` : "";
+	const fullName = fileName
+		? fileExt
+			? `${fileName}.${fileExt}`
+			: fileName
+		: null;
+	const hintStr = fullName ? `\n文件名：${fullName}` : "";
 	const titleModel = createTitleModel(c.env);
 	const result = streamText({
 		model: titleModel,
@@ -336,7 +339,11 @@ app.post("/api/chat", async (c) => {
 				]);
 				await touchThread(db, threadId, userId);
 			} catch (e) {
-				console.error("[Worker] persist user msg:", e);
+				log.error({
+					module: "chat",
+					msg: "persist user msg failed",
+					error: String(e),
+				});
 			}
 		}
 
@@ -422,7 +429,11 @@ app.post("/api/chat", async (c) => {
 								await updateThreadTitle(db, threadId, userId, cleaned);
 							}
 						} catch (e) {
-							console.error("[Worker] title stream:", e);
+							log.error({
+								module: "chat",
+								msg: "title stream failed",
+								error: String(e),
+							});
 						}
 					})();
 				}
@@ -453,7 +464,11 @@ app.post("/api/chat", async (c) => {
 						}
 					}
 				} catch (e) {
-					console.error("[Worker] persist assistant msgs:", e);
+					log.error({
+						module: "chat",
+						msg: "persist assistant msgs failed",
+						error: String(e),
+					});
 				} finally {
 					resolveFinish();
 				}
@@ -465,7 +480,7 @@ app.post("/api/chat", async (c) => {
 		return createUIMessageStreamResponse({ stream: uiStream });
 	} catch (error: unknown) {
 		const msg = error instanceof Error ? error.message : "未知错误";
-		console.error("[Worker] /api/chat error:", msg);
+		log.error({ module: "chat", msg });
 		return c.json({ error: msg }, 500);
 	}
 });
