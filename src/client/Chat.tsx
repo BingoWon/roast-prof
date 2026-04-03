@@ -13,7 +13,10 @@ import {
 	ThreadPrimitive,
 } from "@assistant-ui/react";
 import { useAISDKRuntime } from "@assistant-ui/react-ai-sdk";
-import { DefaultChatTransport } from "ai";
+import {
+	DefaultChatTransport,
+	lastAssistantMessageIsCompleteWithToolCalls,
+} from "ai";
 import {
 	Bot,
 	Check,
@@ -93,6 +96,14 @@ const attachmentAdapter: AttachmentAdapter = {
 };
 
 // ── Recipe Update Context ────────────────────────────────────────────────────
+
+type AddToolResultFn = (opts: {
+	tool: string;
+	toolCallId: string;
+	// biome-ignore lint/suspicious/noExplicitAny: tool output varies per tool
+	output: any;
+}) => void;
+export const AddToolResultCtx = createContext<AddToolResultFn | null>(null);
 
 const RecipeUpdateCtx = createContext<((data: Partial<Recipe>) => void) | null>(
 	null,
@@ -339,6 +350,7 @@ export function Chat({
 		id: threadId,
 		transport,
 		messages: initialMessages,
+		sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithToolCalls,
 		onData: (part) => {
 			const p = part as { type: string; data?: unknown };
 			if (p.type === "data-title-delta" && typeof p.data === "string") {
@@ -372,83 +384,72 @@ export function Chat({
 		}
 	}, [registerImprove, recipe, runtime]);
 
-	// Listen for HITL search card user actions
-	useEffect(() => {
-		const handler = (e: Event) => {
-			const { message } = (e as CustomEvent).detail as { message: string };
-			runtime.thread.append({
-				role: "user",
-				content: [{ type: "text", text: message }],
-			});
-		};
-		window.addEventListener("rag-search-action", handler);
-		return () => window.removeEventListener("rag-search-action", handler);
-	}, [runtime]);
-
 	return (
-		<RecipeUpdateCtx value={onRecipeUpdate}>
-			<AssistantRuntimeProvider runtime={runtime}>
-				<div className="flex h-full w-full flex-col relative overflow-hidden font-sans">
-					<ThreadPrimitive.Root className="flex flex-col h-full w-full relative z-10">
-						<ThreadPrimitive.Viewport className="flex-1 overflow-y-auto px-3 py-6 scroll-smooth">
-							<ThreadPrimitive.Empty>
-								<RecipeEmptyState
-									onSend={(text) =>
-										runtime.thread.append({
-											role: "user",
-											content: [{ type: "text", text }],
-										})
-									}
+		<AddToolResultCtx value={chat.addToolResult}>
+			<RecipeUpdateCtx value={onRecipeUpdate}>
+				<AssistantRuntimeProvider runtime={runtime}>
+					<div className="flex h-full w-full flex-col relative overflow-hidden font-sans">
+						<ThreadPrimitive.Root className="flex flex-col h-full w-full relative z-10">
+							<ThreadPrimitive.Viewport className="flex-1 overflow-y-auto px-3 py-6 scroll-smooth">
+								<ThreadPrimitive.Empty>
+									<RecipeEmptyState
+										onSend={(text) =>
+											runtime.thread.append({
+												role: "user",
+												content: [{ type: "text", text }],
+											})
+										}
+									/>
+								</ThreadPrimitive.Empty>
+
+								<ThreadPrimitive.Messages
+									components={{ UserMessage, AssistantMessage }}
 								/>
-							</ThreadPrimitive.Empty>
 
-							<ThreadPrimitive.Messages
-								components={{ UserMessage, AssistantMessage }}
-							/>
+								<ThreadPrimitive.ScrollToBottom className="fixed bottom-36 right-4 flex h-8 w-8 items-center justify-center rounded-full bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-zinc-500 shadow-lg transition-all opacity-0 data-[visible]:opacity-100 z-20 cursor-pointer">
+									<ChevronDown className="h-4 w-4" />
+								</ThreadPrimitive.ScrollToBottom>
+							</ThreadPrimitive.Viewport>
 
-							<ThreadPrimitive.ScrollToBottom className="fixed bottom-36 right-4 flex h-8 w-8 items-center justify-center rounded-full bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-zinc-500 shadow-lg transition-all opacity-0 data-[visible]:opacity-100 z-20 cursor-pointer">
-								<ChevronDown className="h-4 w-4" />
-							</ThreadPrimitive.ScrollToBottom>
-						</ThreadPrimitive.Viewport>
-
-						<ThreadPrimitive.ViewportFooter className="pb-4 pt-3 px-3 sticky bottom-0 bg-gradient-to-t from-white/50 via-white/40 dark:from-zinc-900/50 dark:via-zinc-900/40 to-transparent backdrop-blur-sm z-30">
-							<ComposerPrimitive.Root className="flex w-full flex-col rounded-2xl bg-white/70 dark:bg-zinc-800/70 p-2 shadow-sm border border-white/60 dark:border-zinc-700/50 backdrop-blur-xl transition-all focus-within:border-blue-400/40 focus-within:ring-2 focus-within:ring-blue-400/10">
-								<div className="flex flex-wrap gap-2 px-1 pt-1 pb-0 empty:hidden">
-									<ComposerPrimitive.Attachments
-										components={{ Attachment: ComposerAttachment }}
-									/>
-								</div>
-								<div className="flex items-end gap-1">
-									<ComposerPrimitive.AddAttachment
-										className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-zinc-400 dark:text-zinc-500 transition-all hover:bg-zinc-100 dark:hover:bg-zinc-700 hover:text-zinc-600 dark:hover:text-zinc-300 active:scale-95 cursor-pointer"
-										title="添加附件"
-									>
-										<Paperclip className="h-4 w-4" />
-									</ComposerPrimitive.AddAttachment>
-									<ComposerPrimitive.Input
-										placeholder="输入消息..."
-										rows={1}
-										className="flex-1 max-h-28 resize-none bg-transparent px-2 py-2.5 outline-none text-zinc-900 dark:text-zinc-100 placeholder-zinc-400 dark:placeholder-zinc-600 text-sm leading-relaxed"
-									/>
-									<div className="flex items-center gap-1 mb-0.5">
-										<ComposerPrimitive.Cancel className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-zinc-500 transition-all hover:bg-zinc-100 dark:hover:bg-zinc-800 hover:text-red-500 active:scale-95 cursor-pointer">
-											<Trash2 className="h-3.5 w-3.5" />
-										</ComposerPrimitive.Cancel>
-										<ComposerPrimitive.Send asChild>
-											<button
-												type="submit"
-												className="flex h-8 w-10 items-center justify-center rounded-full bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 shadow-md transition-all hover:scale-105 active:scale-95 disabled:opacity-40 cursor-pointer"
-											>
-												<Send className="h-3.5 w-3.5 ml-0.5" />
-											</button>
-										</ComposerPrimitive.Send>
+							<ThreadPrimitive.ViewportFooter className="pb-4 pt-3 px-3 sticky bottom-0 bg-gradient-to-t from-white/50 via-white/40 dark:from-zinc-900/50 dark:via-zinc-900/40 to-transparent backdrop-blur-sm z-30">
+								<ComposerPrimitive.Root className="flex w-full flex-col rounded-2xl bg-white/70 dark:bg-zinc-800/70 p-2 shadow-sm border border-white/60 dark:border-zinc-700/50 backdrop-blur-xl transition-all focus-within:border-blue-400/40 focus-within:ring-2 focus-within:ring-blue-400/10">
+									<div className="flex flex-wrap gap-2 px-1 pt-1 pb-0 empty:hidden">
+										<ComposerPrimitive.Attachments
+											components={{ Attachment: ComposerAttachment }}
+										/>
 									</div>
-								</div>
-							</ComposerPrimitive.Root>
-						</ThreadPrimitive.ViewportFooter>
-					</ThreadPrimitive.Root>
-				</div>
-			</AssistantRuntimeProvider>
-		</RecipeUpdateCtx>
+									<div className="flex items-end gap-1">
+										<ComposerPrimitive.AddAttachment
+											className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-zinc-400 dark:text-zinc-500 transition-all hover:bg-zinc-100 dark:hover:bg-zinc-700 hover:text-zinc-600 dark:hover:text-zinc-300 active:scale-95 cursor-pointer"
+											title="添加附件"
+										>
+											<Paperclip className="h-4 w-4" />
+										</ComposerPrimitive.AddAttachment>
+										<ComposerPrimitive.Input
+											placeholder="输入消息..."
+											rows={1}
+											className="flex-1 max-h-28 resize-none bg-transparent px-2 py-2.5 outline-none text-zinc-900 dark:text-zinc-100 placeholder-zinc-400 dark:placeholder-zinc-600 text-sm leading-relaxed"
+										/>
+										<div className="flex items-center gap-1 mb-0.5">
+											<ComposerPrimitive.Cancel className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-zinc-500 transition-all hover:bg-zinc-100 dark:hover:bg-zinc-800 hover:text-red-500 active:scale-95 cursor-pointer">
+												<Trash2 className="h-3.5 w-3.5" />
+											</ComposerPrimitive.Cancel>
+											<ComposerPrimitive.Send asChild>
+												<button
+													type="submit"
+													className="flex h-8 w-10 items-center justify-center rounded-full bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 shadow-md transition-all hover:scale-105 active:scale-95 disabled:opacity-40 cursor-pointer"
+												>
+													<Send className="h-3.5 w-3.5 ml-0.5" />
+												</button>
+											</ComposerPrimitive.Send>
+										</div>
+									</div>
+								</ComposerPrimitive.Root>
+							</ThreadPrimitive.ViewportFooter>
+						</ThreadPrimitive.Root>
+					</div>
+				</AssistantRuntimeProvider>
+			</RecipeUpdateCtx>
+		</AddToolResultCtx>
 	);
 }

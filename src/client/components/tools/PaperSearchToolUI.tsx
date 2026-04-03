@@ -1,47 +1,64 @@
 import type { ToolCallMessagePartProps } from "@assistant-ui/react";
 import { BookOpen, Loader2, Search, Sparkles, X } from "lucide-react";
-import { type FC, useState } from "react";
+import { type FC, useContext, useState } from "react";
+import { AddToolResultCtx } from "../../Chat";
 
-// ── Suggest Search (non-blocking, renders after tool returns) ────────────────
+// ── Suggest Search (blocks agent until user responds via addToolResult) ──────
 
 export const SuggestSearchToolUI: FC<ToolCallMessagePartProps> = ({
+	toolCallId,
+	args,
 	result,
 }) => {
-	if (!result) {
+	const a = args as { queries?: string[]; defaultTopK?: number };
+
+	// Already resolved — show compact confirmation
+	if (result) {
+		const r = result as { action: string; query?: string; topK?: number };
+		if (r.action === "skip") {
+			return (
+				<div className="mb-3 flex items-center gap-2 text-xs text-zinc-500">
+					<X className="w-3.5 h-3.5" />
+					已跳过确认，由 AI 自主检索
+				</div>
+			);
+		}
+		if (r.action === "auto") {
+			return (
+				<div className="mb-3 flex items-center gap-2 text-xs text-blue-500 dark:text-blue-400">
+					<Sparkles className="w-3.5 h-3.5" />
+					已委托 AI 选择最佳查询
+				</div>
+			);
+		}
 		return (
-			<div className="mb-3 flex items-center gap-2 text-xs text-blue-500 dark:text-blue-400">
-				<Loader2 className="w-3.5 h-3.5 animate-spin" />
-				正在生成检索建议...
+			<div className="mb-3 flex items-center gap-2 text-xs text-emerald-600 dark:text-emerald-400">
+				<Search className="w-3.5 h-3.5" />
+				已确认检索：{r.query}（{r.topK} 条）
 			</div>
 		);
 	}
 
-	const r = result as {
-		queries: string[];
-		defaultTopK: number;
-		papers: number;
-	};
-
 	return (
 		<SearchCard
-			queries={r.queries ?? []}
-			defaultTopK={r.defaultTopK ?? 5}
-			papers={r.papers ?? 0}
+			toolCallId={toolCallId}
+			queries={a.queries ?? []}
+			defaultTopK={a.defaultTopK ?? 5}
 		/>
 	);
 };
 
-// ── Search Card (dispatches user intent as new message) ─────────────────────
+// ── Search Card (calls addToolResult to unblock the agent) ──────────────────
 
 const SearchCard: FC<{
+	toolCallId: string;
 	queries: string[];
 	defaultTopK: number;
-	papers: number;
-}> = ({ queries, defaultTopK, papers }) => {
+}> = ({ toolCallId, queries, defaultTopK }) => {
+	const addToolResult = useContext(AddToolResultCtx);
 	const [selected, setSelected] = useState<number | null>(null);
 	const [custom, setCustom] = useState("");
 	const [topK, setTopK] = useState(defaultTopK);
-	const [submitted, setSubmitted] = useState<string | null>(null);
 
 	const activeQuery =
 		selected !== null
@@ -51,21 +68,10 @@ const SearchCard: FC<{
 			: null;
 	const canSubmit = !!activeQuery && activeQuery.length > 0;
 
-	const dispatch = (message: string) => {
-		setSubmitted(message);
-		window.dispatchEvent(
-			new CustomEvent("rag-search-action", { detail: { message } }),
-		);
+	// Like Mastra's `respond()` — sends tool result back to the agent
+	const respond = (output: Record<string, unknown>) => {
+		addToolResult?.({ tool: "rag_suggest", toolCallId, output });
 	};
-
-	if (submitted) {
-		return (
-			<div className="mb-3 flex items-center gap-2 text-xs text-emerald-600 dark:text-emerald-400">
-				<Search className="w-3.5 h-3.5" />
-				{submitted.length > 40 ? `${submitted.slice(0, 40)}...` : submitted}
-			</div>
-		);
-	}
 
 	return (
 		<div className="mb-3 rounded-2xl border border-zinc-200/60 dark:border-zinc-700/50 bg-white/70 dark:bg-zinc-800/70 overflow-hidden shadow-sm backdrop-blur-sm">
@@ -75,7 +81,7 @@ const SearchCard: FC<{
 					RAG 资料检索
 				</div>
 				<span className="text-[10px] px-2 py-0.5 rounded-full bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400">
-					{papers} 份资料
+					等待确认
 				</span>
 			</div>
 
@@ -140,7 +146,13 @@ const SearchCard: FC<{
 			<div className="flex items-center gap-2 px-4 py-3 border-t border-zinc-100/60 dark:border-zinc-700/40">
 				<button
 					type="button"
-					onClick={() => dispatch("请你自行决定最佳查询来执行 RAG 资料检索。")}
+					onClick={() =>
+						respond({
+							action: "auto",
+							message:
+								"用户让你帮他选择，请自行决定最佳查询和参数来执行 rag_search。",
+						})
+					}
 					className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition cursor-pointer"
 				>
 					<Sparkles className="w-3 h-3" />
@@ -150,9 +162,12 @@ const SearchCard: FC<{
 					type="button"
 					disabled={!canSubmit}
 					onClick={() =>
-						dispatch(
-							`请使用查询「${activeQuery}」执行 RAG 资料检索，返回 ${topK} 条结果。`,
-						)
+						respond({
+							action: "confirm",
+							query: activeQuery,
+							topK,
+							message: `用户确认使用查询「${activeQuery}」检索 ${topK} 条结果。请调用 rag_search。`,
+						})
 					}
 					className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium transition ${
 						canSubmit
@@ -166,7 +181,10 @@ const SearchCard: FC<{
 				<button
 					type="button"
 					onClick={() =>
-						dispatch("不需要再问我检索参数，请直接执行 RAG 资料检索。")
+						respond({
+							action: "skip",
+							message: "用户不想被确认，请直接执行 rag_search。",
+						})
 					}
 					className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium text-zinc-400 dark:text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition cursor-pointer"
 				>
