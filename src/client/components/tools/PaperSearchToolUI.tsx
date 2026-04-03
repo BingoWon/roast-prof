@@ -1,63 +1,48 @@
 import type { ToolCallMessagePartProps } from "@assistant-ui/react";
 import { BookOpen, Loader2, Search, Sparkles } from "lucide-react";
-import { type FC, useState } from "react";
+import { type FC, useContext, useState } from "react";
+import { AddToolResultCtx } from "../../Chat";
 
-// ── Suggest Search (interactive card) ───────────────────────────────────────
+// ── Suggest Search (blocking HITL card) ─────────────────────────────────────
 
 export const SuggestSearchToolUI: FC<ToolCallMessagePartProps> = ({
+	toolCallId,
 	args,
 	result,
 }) => {
-	const a = args as {
-		queries?: string[];
-		defaultTopK?: number;
-	};
+	const a = args as { queries?: string[]; defaultTopK?: number };
 
-	if (!result) {
+	// Already resolved
+	if (result) {
+		const r = result as { query: string; topK: number };
 		return (
-			<div className="mb-3 flex items-center gap-2 text-xs text-blue-500 dark:text-blue-400">
-				<Loader2 className="w-3.5 h-3.5 animate-spin" />
-				正在生成检索建议...
+			<div className="mb-3 flex items-center gap-2 text-xs text-emerald-600 dark:text-emerald-400">
+				<Search className="w-3.5 h-3.5" />
+				已确认检索：{r.query}（{r.topK} 条）
 			</div>
 		);
 	}
 
-	const r = result as {
-		queries: string[];
-		defaultTopK: number;
-		papers: number;
-		needsConfirmation: boolean;
-	};
-
 	return (
 		<SearchCard
-			queries={r.queries ?? a.queries ?? []}
-			defaultTopK={r.defaultTopK ?? a.defaultTopK ?? 5}
-			papers={r.papers ?? 0}
+			toolCallId={toolCallId}
+			queries={a.queries ?? []}
+			defaultTopK={a.defaultTopK ?? 5}
 		/>
 	);
 };
 
-// ── Search Card (Human-in-the-Loop) ─────────────────────────────────────────
+// ── Search Card (blocks agent until user confirms) ──────────────────────────
 
 const SearchCard: FC<{
+	toolCallId: string;
 	queries: string[];
 	defaultTopK: number;
-	papers: number;
-}> = ({ queries, defaultTopK, papers }) => {
+}> = ({ toolCallId, queries, defaultTopK }) => {
+	const addToolResult = useContext(AddToolResultCtx);
 	const [selected, setSelected] = useState<number | null>(null);
 	const [custom, setCustom] = useState("");
 	const [topK, setTopK] = useState(defaultTopK);
-	const [submitted, setSubmitted] = useState<string | null>(null);
-
-	if (submitted) {
-		return (
-			<div className="mb-3 flex items-center gap-2 text-xs text-emerald-600 dark:text-emerald-400">
-				<Search className="w-3.5 h-3.5" />
-				已提交检索：{submitted}
-			</div>
-		);
-	}
 
 	const activeQuery =
 		selected !== null
@@ -66,33 +51,36 @@ const SearchCard: FC<{
 				: custom.trim()
 			: null;
 
-	const canSubmit = activeQuery && activeQuery.length > 0;
-
-	const handleAutoSelect = () => {
-		setSelected(0);
-	};
+	const canSubmit = !!activeQuery && activeQuery.length > 0;
 
 	const handleSubmit = () => {
-		if (!canSubmit) return;
-		setSubmitted(activeQuery);
-		// Dispatch a custom event that Chat can listen to
-		window.dispatchEvent(
-			new CustomEvent("paper-search-confirm", {
-				detail: { query: activeQuery, topK },
-			}),
-		);
+		if (!canSubmit || !addToolResult) return;
+		addToolResult({
+			tool: "suggest_paper_search",
+			toolCallId,
+			output: { query: activeQuery, topK },
+		});
+	};
+
+	const handleAutoSelect = () => {
+		if (!addToolResult) return;
+		addToolResult({
+			tool: "suggest_paper_search",
+			toolCallId,
+			output: { query: queries[0] ?? "", topK },
+		});
 	};
 
 	return (
-		<div className="mb-3 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 overflow-hidden shadow-sm">
+		<div className="mb-3 rounded-2xl border border-zinc-200/60 dark:border-zinc-700/50 bg-white/70 dark:bg-zinc-800/70 overflow-hidden shadow-sm backdrop-blur-sm">
 			{/* Header */}
-			<div className="flex items-center justify-between px-4 py-3 border-b border-zinc-100 dark:border-zinc-800">
+			<div className="flex items-center justify-between px-4 py-3 border-b border-zinc-100/60 dark:border-zinc-700/40">
 				<div className="flex items-center gap-2 text-sm font-medium text-zinc-800 dark:text-zinc-200">
 					<BookOpen className="w-4 h-4 text-blue-500" />
 					论文检索
 				</div>
-				<span className="text-[10px] text-zinc-400 dark:text-zinc-500">
-					{papers} 篇论文
+				<span className="text-[10px] px-2 py-0.5 rounded-full bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400">
+					等待确认
 				</span>
 			</div>
 
@@ -106,10 +94,10 @@ const SearchCard: FC<{
 						key={q}
 						type="button"
 						onClick={() => setSelected(i)}
-						className={`w-full text-left px-3 py-2 rounded-lg text-sm transition cursor-pointer border ${
+						className={`w-full text-left px-3 py-2.5 rounded-xl text-sm transition cursor-pointer border ${
 							selected === i
 								? "bg-blue-50 dark:bg-blue-950 border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-300"
-								: "bg-zinc-50 dark:bg-zinc-800/50 border-zinc-200 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300 hover:border-zinc-300 dark:hover:border-zinc-600"
+								: "bg-zinc-50/50 dark:bg-zinc-800/30 border-zinc-200/60 dark:border-zinc-700/40 text-zinc-700 dark:text-zinc-300 hover:border-zinc-300 dark:hover:border-zinc-600"
 						}`}
 					>
 						{q}
@@ -118,10 +106,10 @@ const SearchCard: FC<{
 
 				{/* Custom input */}
 				<div
-					className={`flex items-center gap-2 px-3 py-2 rounded-lg border transition ${
+					className={`flex items-center gap-2 px-3 py-2.5 rounded-xl border transition ${
 						selected === queries.length
 							? "bg-blue-50 dark:bg-blue-950 border-blue-300 dark:border-blue-700"
-							: "bg-zinc-50 dark:bg-zinc-800/50 border-zinc-200 dark:border-zinc-700"
+							: "bg-zinc-50/50 dark:bg-zinc-800/30 border-zinc-200/60 dark:border-zinc-700/40"
 					}`}
 				>
 					<input
@@ -159,11 +147,11 @@ const SearchCard: FC<{
 			</div>
 
 			{/* Actions */}
-			<div className="flex items-center gap-2 px-4 py-3 border-t border-zinc-100 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-800/30">
+			<div className="flex items-center gap-2 px-4 py-3 border-t border-zinc-100/60 dark:border-zinc-700/40">
 				<button
 					type="button"
 					onClick={handleAutoSelect}
-					className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition cursor-pointer"
+					className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition cursor-pointer"
 				>
 					<Sparkles className="w-3 h-3" />
 					帮我选择
@@ -172,9 +160,9 @@ const SearchCard: FC<{
 					type="button"
 					onClick={handleSubmit}
 					disabled={!canSubmit}
-					className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition ${
+					className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium transition ${
 						canSubmit
-							? "bg-blue-500 hover:bg-blue-600 text-white cursor-pointer"
+							? "bg-blue-500 hover:bg-blue-600 text-white cursor-pointer shadow-sm"
 							: "bg-zinc-200 dark:bg-zinc-700 text-zinc-400 dark:text-zinc-500 cursor-not-allowed"
 					}`}
 				>

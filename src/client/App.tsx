@@ -194,7 +194,7 @@ function App() {
 			<Show when="signed-in">
 				<div
 					ref={containerRef}
-					className="flex-1 flex h-full overflow-hidden p-2 gap-2 z-10"
+					className="flex-1 flex h-full overflow-hidden p-2 gap-1.5 z-10"
 				>
 					{/* 左栏 */}
 					{layout.leftCollapsed ? (
@@ -202,7 +202,7 @@ function App() {
 					) : (
 						<div
 							style={{ width: layout.leftWidth }}
-							className="h-full flex-shrink-0 overflow-hidden rounded-xl bg-white/50 dark:bg-zinc-900/50 backdrop-blur-sm border border-white/60 dark:border-zinc-700/50"
+							className="h-full flex-shrink-0 overflow-hidden rounded-2xl bg-white/50 dark:bg-zinc-900/50 backdrop-blur-sm border border-white/60 dark:border-zinc-700/50"
 						>
 							<ThreadListSidebar
 								threads={threads}
@@ -220,10 +220,10 @@ function App() {
 					)}
 
 					{/* 左分割线 */}
-					<Divider {...layout.leftDividerProps} />
+					{!layout.leftCollapsed && <Divider {...layout.leftDividerProps} />}
 
 					{/* 中间面板（tab 切换） */}
-					<div className="flex-1 h-full flex flex-col min-w-0 rounded-xl bg-white/50 dark:bg-zinc-900/50 backdrop-blur-sm border border-white/60 dark:border-zinc-700/50 overflow-hidden">
+					<div className="flex-1 h-full flex flex-col min-w-0 rounded-2xl bg-white/50 dark:bg-zinc-900/50 backdrop-blur-sm border border-white/60 dark:border-zinc-700/50 overflow-hidden">
 						{/* Tab bar */}
 						<div className="flex items-center justify-between px-4 pt-3 pb-2 border-b border-zinc-200/50 dark:border-zinc-700/50 flex-shrink-0">
 							<div className="flex items-center gap-1">
@@ -307,7 +307,7 @@ function App() {
 					</div>
 
 					{/* 右分割线 */}
-					<Divider {...layout.rightDividerProps} />
+					{!layout.rightCollapsed && <Divider {...layout.rightDividerProps} />}
 
 					{/* 右栏 */}
 					{layout.rightCollapsed ? (
@@ -315,7 +315,7 @@ function App() {
 					) : (
 						<div
 							style={{ width: layout.rightWidth }}
-							className="h-full flex-shrink-0 overflow-hidden rounded-xl bg-white/50 dark:bg-zinc-900/50 backdrop-blur-sm border border-white/60 dark:border-zinc-700/50"
+							className="h-full flex-shrink-0 overflow-hidden rounded-2xl bg-white/50 dark:bg-zinc-900/50 backdrop-blur-sm border border-white/60 dark:border-zinc-700/50"
 						>
 							{loading && (
 								<div className="h-full flex items-center justify-center">
