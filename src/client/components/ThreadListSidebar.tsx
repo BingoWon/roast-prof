@@ -55,7 +55,7 @@ export const ThreadListSidebar: FC<{
 				{(
 					[
 						{ id: "chat", label: "对话", icon: MessageSquare },
-						{ id: "rag", label: "论文", icon: BookOpen },
+						{ id: "rag", label: "资料", icon: BookOpen },
 					] as const
 				).map((tab) => (
 					<button
@@ -174,7 +174,14 @@ const PapersPanel: FC<{
 	);
 
 	const handleUpload = async (file: File) => {
-		if (!file.name.endsWith(".pdf")) return;
+		const ext = file.name.toLowerCase();
+		const valid =
+			ext.endsWith(".pdf") ||
+			ext.endsWith(".png") ||
+			ext.endsWith(".jpg") ||
+			ext.endsWith(".jpeg") ||
+			ext.endsWith(".webp");
+		if (!valid) return;
 
 		const buffer = await file.arrayBuffer();
 
@@ -357,14 +364,14 @@ const PapersPanel: FC<{
 			>
 				<Upload className="w-5 h-5 text-zinc-400" />
 				<span className="text-xs text-zinc-500 dark:text-zinc-400">
-					拖拽或点击上传 PDF
+					拖拽或点击上传 PDF / 图片
 				</span>
 			</div>
 
 			<input
 				ref={fileRef}
 				type="file"
-				accept=".pdf"
+				accept=".pdf,.png,.jpg,.jpeg,.webp"
 				className="hidden"
 				onChange={(e) => {
 					const file = e.target.files?.[0];
@@ -373,11 +380,11 @@ const PapersPanel: FC<{
 				}}
 			/>
 
-			{/* 论文列表 */}
+			{/* 资料列表 */}
 			<div className="flex-1 overflow-y-auto px-2 pb-4 flex flex-col gap-1 pointer-events-auto">
 				{papers.length === 0 && (
 					<p className="text-center text-xs text-zinc-400 dark:text-zinc-600 mt-4 pointer-events-none">
-						暂无论文
+						暂无资料
 					</p>
 				)}
 				{papers.map((p) => (

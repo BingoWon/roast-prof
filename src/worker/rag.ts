@@ -50,10 +50,11 @@ export async function hashBuffer(buffer: ArrayBuffer): Promise<string> {
 // ── PaddleOCR Sync API ──────────────────────────────────────────────────────
 
 async function parseWithPaddleOCR(
-	pdfBuffer: ArrayBuffer,
+	fileBuffer: ArrayBuffer,
 	token: string,
+	fileType: 0 | 1,
 ): Promise<string> {
-	const bytes = new Uint8Array(pdfBuffer);
+	const bytes = new Uint8Array(fileBuffer);
 	let binary = "";
 	for (let i = 0; i < bytes.length; i++) {
 		binary += String.fromCharCode(bytes[i]);
@@ -68,10 +69,11 @@ async function parseWithPaddleOCR(
 		},
 		body: JSON.stringify({
 			file: fileB64,
-			fileType: 0,
-			useDocOrientationClassify: false,
-			useDocUnwarping: false,
-			useChartRecognition: false,
+			fileType,
+			useDocOrientationClassify: true,
+			useDocUnwarping: true,
+			useLayoutDetection: true,
+			useChartRecognition: true,
 		}),
 	});
 
@@ -119,10 +121,11 @@ type IngestEnv = EmbeddingEnv & {
 	TMT_SECRET_KEY?: string;
 };
 
-export async function ingestPdf(
-	pdfBuffer: ArrayBuffer,
+export async function ingestFile(
+	fileBuffer: ArrayBuffer,
 	opts: {
 		fileName?: string;
+		fileType: 0 | 1;
 		userId: string;
 		db: DbClient;
 		r2: R2Bucket;
@@ -132,7 +135,8 @@ export async function ingestPdf(
 	},
 ): Promise<{ paperId: string; chunks: number }> {
 	const { db, onStatus } = opts;
-	const hash = await hashBuffer(pdfBuffer);
+	const hash = await hashBuffer(fileBuffer);
+	const ext = opts.fileType === 0 ? "pdf" : "img";
 	const now = Math.floor(Date.now() / 1000);
 
 	// Dedup check
@@ -157,13 +161,13 @@ export async function ingestPdf(
 	}
 
 	const paperId = crypto.randomUUID();
-	const r2Key = `papers/${hash}.pdf`;
+	const r2Key = `papers/${hash}.${ext}`;
 	const setStatus = (status: string) =>
 		db.update(papers).set({ status }).where(eq(papers.id, paperId));
 
 	// Step 1: Upload
 	onStatus("uploading", { paperId });
-	await opts.r2.put(r2Key, pdfBuffer);
+	await opts.r2.put(r2Key, fileBuffer);
 	await db.insert(papers).values({
 		id: paperId,
 		hash,
@@ -181,8 +185,9 @@ export async function ingestPdf(
 	onStatus("parsing", { paperId });
 	await setStatus("parsing");
 	const markdown = await parseWithPaddleOCR(
-		pdfBuffer,
+		fileBuffer,
 		opts.env.PADDLE_OCR_TOKEN,
+		opts.fileType,
 	);
 	const markdownR2Key = `papers/${hash}.md`;
 	await opts.r2.put(markdownR2Key, markdown);

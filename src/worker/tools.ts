@@ -134,7 +134,7 @@ export function createRagTools(opts: {
 	return {
 		rag_suggest: tool({
 			description:
-				"论文 RAG 检索建议。当用户要求搜索论文、RAG 检索或提问与论文相关的问题时，先调用此工具生成 3 个候选查询供用户选择。此工具会暂停等待用户选择。",
+				"资料 RAG 检索建议。当用户要求搜索资料、RAG 检索或提问与资料相关的问题时，先调用此工具生成 3 个候选查询供用户选择。此工具会暂停等待用户选择。",
 			inputSchema: zodSchema(
 				z.object({
 					queries: z
@@ -154,7 +154,7 @@ export function createRagTools(opts: {
 
 		rag_search: tool({
 			description:
-				"论文 RAG 检索执行。在用户确认检索参数后调用，或用户明确要求直接 RAG 搜索时调用。",
+				"资料 RAG 检索执行。在用户确认检索参数后调用，或用户明确要求直接 RAG 搜索时调用。",
 			inputSchema: zodSchema(
 				z.object({
 					query: z.string().describe("检索查询"),
@@ -163,7 +163,7 @@ export function createRagTools(opts: {
 			),
 			execute: async ({ query, topK }) => {
 				if (opts.paperIds.length === 0) {
-					return { context: "", message: "用户尚未上传任何论文" };
+					return { context: "", message: "用户尚未上传任何资料" };
 				}
 				const context = await retrieveContext(query, {
 					paperIds: opts.paperIds,

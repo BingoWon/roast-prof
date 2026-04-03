@@ -53,7 +53,7 @@ export const userPapers = sqliteTable(
 		paperId: text("paper_id")
 			.notNull()
 			.references(() => papers.id),
-		title: text("title").notNull().default("新论文"),
+		title: text("title").notNull().default("新资料"),
 		createdAt: integer("created_at", { mode: "number" })
 			.notNull()
 			.default(sql`(strftime('%s', 'now'))`),

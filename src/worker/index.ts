@@ -23,7 +23,7 @@ import { createModel, createTitleModel, SYSTEM_PROMPT } from "./model";
 import {
 	checkPaperByHash,
 	getPaperMarkdown,
-	ingestPdf,
+	ingestFile,
 	listUserPapers,
 	renameUserPaper,
 	unlinkUserPaper,
@@ -115,11 +115,18 @@ app.post("/api/papers", async (c) => {
 
 	const formData = await c.req.formData();
 	const file = formData.get("file") as File | null;
+	if (!file) return c.json({ error: "缺少文件" }, 400);
 
-	if (!file?.name.endsWith(".pdf")) {
-		return c.json({ error: "请上传 PDF 文件" }, 400);
+	const IMAGE_EXTS = [".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tiff"];
+	const name = file.name.toLowerCase();
+	const isPdf = name.endsWith(".pdf");
+	const isImage = IMAGE_EXTS.some((ext) => name.endsWith(ext));
+
+	if (!isPdf && !isImage) {
+		return c.json({ error: "请上传 PDF 或图片文件" }, 400);
 	}
 
+	const fileType: 0 | 1 = isPdf ? 0 : 1;
 	const db = createDb(c.env.DB);
 	const buffer = await file.arrayBuffer();
 	const encoder = new TextEncoder();
@@ -133,8 +140,9 @@ app.post("/api/papers", async (c) => {
 			};
 
 			try {
-				await ingestPdf(buffer, {
-					fileName: file.name.replace(/\.pdf$/i, ""),
+				await ingestFile(buffer, {
+					fileName: file.name.replace(/\.[^.]+$/, ""),
+					fileType,
 					userId,
 					db,
 					r2: c.env.R2,
@@ -199,11 +207,14 @@ app.get("/api/papers/:id/download", async (c) => {
 	const obj = await c.env.R2.get(row.r2Key);
 	if (!obj) return c.json({ error: "文件不存在" }, 404);
 
+	const isImage = !row.r2Key.endsWith(".pdf");
+	const contentType = isImage ? "application/octet-stream" : "application/pdf";
+	const ext = row.r2Key.split(".").pop() ?? "pdf";
 	const filename = encodeURIComponent(row.title);
 	return new Response(obj.body, {
 		headers: {
-			"Content-Type": "application/pdf",
-			"Content-Disposition": `attachment; filename="${filename}.pdf"; filename*=UTF-8''${filename}.pdf`,
+			"Content-Type": contentType,
+			"Content-Disposition": `attachment; filename="${filename}.${ext}"; filename*=UTF-8''${filename}.${ext}`,
 		},
 	});
 });
@@ -245,7 +256,7 @@ app.post("/api/papers/:id/generate-title", async (c) => {
 	const titleModel = createTitleModel(c.env);
 	const result = streamText({
 		model: titleModel,
-		prompt: `根据以下论文内容生成简洁中文标题，6-12个字，无标点无引号，只回复标题：${hint}\n${excerpt}`,
+		prompt: `根据以下资料内容生成简洁中文标题，6-12个字，无标点无引号，只回复标题：${hint}\n${excerpt}`,
 	});
 
 	let title = "";

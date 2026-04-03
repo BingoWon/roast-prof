@@ -77,7 +77,7 @@ const SearchCard: FC<{
 			<div className="flex items-center justify-between px-4 py-3 border-b border-zinc-100/60 dark:border-zinc-700/40">
 				<div className="flex items-center gap-2 text-sm font-medium text-zinc-800 dark:text-zinc-200">
 					<BookOpen className="w-4 h-4 text-blue-500" />
-					论文 RAG 检索
+					资料 RAG 检索
 				</div>
 				<span className="text-[10px] px-2 py-0.5 rounded-full bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400">
 					等待确认
@@ -181,14 +181,14 @@ export const PaperSearchToolUI: FC<ToolCallMessagePartProps> = ({
 	isError,
 }) => {
 	if (isError) {
-		return <div className="mb-2 text-xs text-red-500">论文检索失败</div>;
+		return <div className="mb-2 text-xs text-red-500">资料检索失败</div>;
 	}
 
 	if (!result) {
 		return (
 			<div className="mb-2 flex items-center gap-2 text-xs text-blue-500 dark:text-blue-400">
 				<Loader2 className="w-3.5 h-3.5 animate-spin" />
-				正在检索论文...
+				正在检索资料...
 			</div>
 		);
 	}
@@ -200,7 +200,7 @@ export const PaperSearchToolUI: FC<ToolCallMessagePartProps> = ({
 		<div className="mb-2 flex items-center gap-2 text-xs text-emerald-600 dark:text-emerald-400">
 			<BookOpen className="w-3.5 h-3.5 shrink-0" />
 			{hasContext
-				? `已从 ${r.papers ?? 0} 篇论文中检索到相关内容`
+				? `已从 ${r.papers ?? 0} 篇资料中检索到相关内容`
 				: r.message || "未找到相关内容"}
 		</div>
 	);
