@@ -22,6 +22,7 @@ import { createModel, createTitleModel, SYSTEM_PROMPT } from "./model";
 import type { ChatMessagePart, ChatRequestMessage } from "./openrouter";
 import {
 	checkOcrJob,
+	checkPaperByHash,
 	finalizePaper,
 	getPaperMarkdown,
 	isUserLinked,
@@ -29,7 +30,7 @@ import {
 	renameUserPaper,
 	retrieveContext,
 	unlinkUserPaper,
-	uploadPdf,
+	uploadNewPdf,
 } from "./rag";
 import { papers, userPapers } from "./schema";
 import { tools } from "./tools";
@@ -90,6 +91,26 @@ app.get("/api/papers", async (c) => {
 	return c.json(await listUserPapers(db, userId));
 });
 
+app.get("/api/papers/check", async (c) => {
+	const userId = await requireUserId(c);
+	if (!userId) return c.json({ error: "未授权" }, 401);
+	const hash = c.req.query("hash");
+	if (!hash) return c.json({ error: "缺少 hash 参数" }, 400);
+
+	const db = createDb(c.env.DB);
+	const result = await checkPaperByHash(db, hash);
+	if (!result.exists) return c.json({ exists: false });
+
+	// Auto-link user if not already linked
+	const now = Math.floor(Date.now() / 1000);
+	await db
+		.insert(userPapers)
+		.values({ userId, paperId: result.paperId, createdAt: now })
+		.onConflictDoNothing();
+
+	return c.json(result);
+});
+
 app.post("/api/papers", async (c) => {
 	const userId = await requireUserId(c);
 	if (!userId) return c.json({ error: "未授权" }, 401);
@@ -106,7 +127,7 @@ app.post("/api/papers", async (c) => {
 	const db = createDb(c.env.DB);
 	const buffer = await file.arrayBuffer();
 
-	const result = await uploadPdf(buffer, {
+	const result = await uploadNewPdf(buffer, {
 		userId,
 		db,
 		r2: c.env.R2,
@@ -152,10 +173,14 @@ app.get("/api/papers/:id/status", async (c) => {
 		.limit(1);
 	if (!paper) return c.json({ error: "未找到" }, 404);
 
-	if (paper.status !== "processing" || !paper.jobId) {
+	// Non-OCR statuses: return immediately
+	const isOcrPhase =
+		paper.status === "ocr_pending" || paper.status === "ocr_running";
+	if (!isOcrPhase || !paper.jobId) {
 		return c.json({ status: paper.status, chunks: paper.chunks });
 	}
 
+	// Check PaddleOCR job
 	const job = await checkOcrJob(paper.jobId, c.env.PADDLE_OCR_TOKEN);
 
 	if (job.state === "failed") {
@@ -167,13 +192,27 @@ app.get("/api/papers/:id/status", async (c) => {
 	}
 
 	if (job.state !== "done") {
-		return c.json({ status: "processing", progress: job.progress });
+		// Update to ocr_running if we have progress
+		if (job.progress && paper.status === "ocr_pending") {
+			await db
+				.update(papers)
+				.set({ status: "ocr_running" })
+				.where(eq(papers.id, paperId));
+		}
+		return c.json({
+			status:
+				paper.status === "ocr_pending" && job.progress
+					? "ocr_running"
+					: paper.status,
+			progress: job.progress,
+		});
 	}
 
 	if (!job.jsonUrl) {
 		return c.json({ status: "failed", error: "OCR 结果 URL 缺失" });
 	}
 
+	// OCR done — finalize (chunking → embedding → ready)
 	try {
 		const result = await finalizePaper(paperId, job.jsonUrl, {
 			db,

@@ -118,6 +118,13 @@ interface Paper {
 	createdAt: number;
 }
 
+const PROCESSING_STATUSES = [
+	"ocr_pending",
+	"ocr_running",
+	"chunking",
+	"embedding",
+];
+
 const PapersPanel: FC<{
 	onPaperSelect?: (paperId: string, title: string) => void;
 }> = ({ onPaperSelect }) => {
@@ -139,24 +146,33 @@ const PapersPanel: FC<{
 		fetchPapers();
 	}, [fetchPapers]);
 
-	// Poll processing papers; trigger LLM title generation when ready
+	// Poll non-ready papers; trigger LLM title generation when ready
 	useEffect(() => {
-		const processing = papers.filter((p) => p.status === "processing");
-		if (processing.length === 0) return;
+		const pending = papers.filter((p) =>
+			PROCESSING_STATUSES.includes(p.status),
+		);
+		if (pending.length === 0) return;
 
 		const interval = setInterval(async () => {
 			let changed = false;
-			for (const p of processing) {
+			for (const p of pending) {
 				try {
 					const res = await fetch(`/api/papers/${p.id}/status`);
 					if (!res.ok) continue;
-					const data = (await res.json()) as {
-						status: string;
-						chunks?: number;
-					};
+					const data = (await res.json()) as { status: string };
+
+					if (data.status !== p.status) {
+						// Update status locally for immediate UI feedback
+						setPapers((prev) =>
+							prev.map((pp) =>
+								pp.id === p.id ? { ...pp, status: data.status } : pp,
+							),
+						);
+					}
+
 					if (data.status === "ready") {
 						changed = true;
-						// Generate LLM title for newly ready paper
+						// Generate LLM title (best-effort)
 						try {
 							const titleRes = await fetch(
 								`/api/papers/${p.id}/generate-title`,
@@ -173,7 +189,7 @@ const PapersPanel: FC<{
 								}
 							}
 						} catch {
-							/* title generation is best-effort */
+							/* best-effort */
 						}
 					} else if (data.status === "failed") {
 						changed = true;
@@ -183,7 +199,7 @@ const PapersPanel: FC<{
 				}
 			}
 			if (changed) fetchPapers();
-		}, 5000);
+		}, 2000);
 
 		return () => clearInterval(interval);
 	}, [papers, fetchPapers]);
@@ -192,6 +208,30 @@ const PapersPanel: FC<{
 		if (!file.name.endsWith(".pdf")) return;
 		setUploading(true);
 		try {
+			const buffer = await file.arrayBuffer();
+
+			// Frontend hash precheck
+			const digest = await crypto.subtle.digest("SHA-256", buffer);
+			const hash = [...new Uint8Array(digest)]
+				.map((b) => b.toString(16).padStart(2, "0"))
+				.join("");
+
+			const checkRes = await fetch(
+				`/api/papers/check?hash=${encodeURIComponent(hash)}`,
+			);
+			if (checkRes.ok) {
+				const check = (await checkRes.json()) as {
+					exists: boolean;
+					paperId?: string;
+				};
+				if (check.exists) {
+					// Already exists — auto-linked by check endpoint
+					await fetchPapers();
+					return;
+				}
+			}
+
+			// Not found — upload file
 			const form = new FormData();
 			form.append("file", file);
 			const res = await fetch("/api/papers", { method: "POST", body: form });
@@ -295,6 +335,61 @@ const PapersPanel: FC<{
 	);
 };
 
+// ── Progress Dots ────────────────────────────────────────────────────────────
+
+function stepIndex(status: string): number {
+	if (status === "ocr_pending" || status === "ocr_running") return 0;
+	if (status === "chunking") return 1;
+	if (status === "embedding") return 2;
+	return -1;
+}
+
+const ProgressDots: FC<{ status: string }> = ({ status }) => {
+	const active = stepIndex(status);
+	// Deduplicated labels: 解析 → 分块 → 嵌入
+	const labels = ["解析", "分块", "嵌入"];
+
+	return (
+		<div className="flex items-center gap-0.5 mt-0.5">
+			{labels.map((label, i) => {
+				const done = i < active;
+				const current = i === active;
+				return (
+					<div key={label} className="flex items-center gap-0.5">
+						{i > 0 && (
+							<div
+								className={`w-3 h-px ${done || current ? "bg-blue-400" : "bg-zinc-300 dark:bg-zinc-700"}`}
+							/>
+						)}
+						<div className="flex flex-col items-center">
+							<div
+								className={`w-1.5 h-1.5 rounded-full transition-colors ${
+									done
+										? "bg-blue-400"
+										: current
+											? "bg-blue-400 animate-pulse"
+											: "bg-zinc-300 dark:bg-zinc-700"
+								}`}
+							/>
+							<span
+								className={`text-[8px] leading-tight mt-0.5 ${
+									current
+										? "text-blue-400 font-medium"
+										: done
+											? "text-blue-400/60"
+											: "text-zinc-400 dark:text-zinc-600"
+								}`}
+							>
+								{label}
+							</span>
+						</div>
+					</div>
+				);
+			})}
+		</div>
+	);
+};
+
 // ── Paper List Item ──────────────────────────────────────────────────────────
 
 const PaperListItem: FC<{
@@ -379,29 +474,33 @@ const PaperListItem: FC<{
 			className={`group flex items-center justify-between rounded-lg px-3 py-2.5 text-sm transition ${
 				p.status === "ready"
 					? "hover:bg-zinc-100 dark:hover:bg-zinc-900 cursor-pointer"
-					: "opacity-60"
+					: p.status === "failed"
+						? "opacity-50"
+						: ""
 			}`}
 		>
 			<div className="flex items-center gap-2 overflow-hidden min-w-0">
-				{p.status === "processing" ? (
-					<Loader2 className="w-4 h-4 text-blue-400 animate-spin shrink-0" />
-				) : (
+				{p.status === "ready" ? (
 					<FileText className="w-4 h-4 text-zinc-400 shrink-0" />
+				) : p.status === "failed" ? (
+					<FileText className="w-4 h-4 text-red-400 shrink-0" />
+				) : (
+					<Loader2 className="w-4 h-4 text-blue-400 animate-spin shrink-0" />
 				)}
 				<div className="min-w-0 flex-1">
 					<div className="truncate text-zinc-700 dark:text-zinc-300 font-medium">
 						{p.title}
 					</div>
-					<div className="flex items-center justify-between text-[10px] text-zinc-400 dark:text-zinc-600">
-						{p.status === "processing" ? (
-							<span className="text-blue-400">OCR 解析中...</span>
-						) : p.status === "failed" ? (
-							<span className="text-red-400">解析失败</span>
-						) : (
+					{p.status === "ready" ? (
+						<div className="flex items-center justify-between text-[10px] text-zinc-400 dark:text-zinc-600">
 							<span>{p.chunks} 个片段</span>
-						)}
-						<span>{timeAgo(p.createdAt)}</span>
-					</div>
+							<span>{timeAgo(p.createdAt)}</span>
+						</div>
+					) : p.status === "failed" ? (
+						<div className="text-[10px] text-red-400">解析失败</div>
+					) : (
+						<ProgressDots status={p.status} />
+					)}
 				</div>
 			</div>
 			<div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition shrink-0">

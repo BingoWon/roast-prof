@@ -134,73 +134,27 @@ export async function fetchOcrMarkdown(jsonlUrl: string): Promise<string> {
 	return parts.join("\n\n");
 }
 
-// ── Ingest Markdown (chunks + vectorize for a paper) ────────────────────────
-
-async function ingestMarkdown(
-	markdown: string,
-	opts: {
-		source?: string;
-		paperId: string;
-		db: DbClient;
-		vectorize: VectorizeIndex;
-		env: EmbeddingEnv;
-	},
-): Promise<{ chunks: number }> {
-	const splitter = new MarkdownTextSplitter({
-		chunkSize: CHUNK_SIZE,
-		chunkOverlap: CHUNK_OVERLAP,
-	});
-	const chunks = await splitter.splitText(markdown);
-	if (chunks.length === 0) return { chunks: 0 };
-
-	const ids = chunks.map(() => crypto.randomUUID());
-	const now = Math.floor(Date.now() / 1000);
-
-	const rows = chunks.map((content, i) => ({
-		id: ids[i],
-		content,
-		source: opts.source ?? null,
-		paperId: opts.paperId,
-		createdAt: now,
-	}));
-
-	for (let i = 0; i < rows.length; i += INSERT_BATCH) {
-		await opts.db.insert(documents).values(rows.slice(i, i + INSERT_BATCH));
-	}
-
-	const embeddings = createEmbeddings(opts.env);
-	const store = createVectorStore(opts.vectorize, embeddings);
-
-	const docs = chunks.map(
-		(content, i) =>
-			new Document({
-				pageContent: content,
-				metadata: {
-					id: ids[i],
-					paperId: opts.paperId,
-				},
-			}),
-	);
-
-	try {
-		await store.addDocuments(docs, { ids });
-	} catch (e) {
-		console.warn(
-			"[RAG] Vectorize indexing skipped (local dev):",
-			(e as Error).message,
-		);
-	}
-
-	return { chunks: chunks.length };
-}
-
 // ── Upload PDF: dedup by hash, link to user ─────────────────────────────────
 
-/**
- * Upload a PDF: compute hash, dedup against existing papers, link to user.
- * Returns the paperId and whether OCR was triggered (isNew).
- */
-export async function uploadPdf(
+/** Check if a paper with this hash already exists. */
+export async function checkPaperByHash(
+	db: DbClient,
+	hash: string,
+): Promise<
+	{ exists: true; paperId: string; status: string } | { exists: false }
+> {
+	const [row] = await db
+		.select({ id: papers.id, status: papers.status })
+		.from(papers)
+		.where(eq(papers.hash, hash))
+		.limit(1);
+	return row
+		? { exists: true, paperId: row.id, status: row.status }
+		: { exists: false };
+}
+
+/** Upload a new PDF: store in R2, submit OCR, link to user. */
+export async function uploadNewPdf(
 	pdfBuffer: ArrayBuffer,
 	opts: {
 		userId: string;
@@ -208,11 +162,11 @@ export async function uploadPdf(
 		r2: R2Bucket;
 		ocrToken: string;
 	},
-): Promise<{ paperId: string; isNew: boolean }> {
+): Promise<{ paperId: string }> {
 	const hash = await hashBuffer(pdfBuffer);
 	const now = Math.floor(Date.now() / 1000);
 
-	// Check if paper with this hash already exists
+	// Double-check dedup (race condition safety)
 	const [existing] = await opts.db
 		.select({ id: papers.id })
 		.from(papers)
@@ -220,15 +174,13 @@ export async function uploadPdf(
 		.limit(1);
 
 	if (existing) {
-		// Paper exists — just link user (ignore if already linked)
 		await opts.db
 			.insert(userPapers)
 			.values({ userId: opts.userId, paperId: existing.id, createdAt: now })
 			.onConflictDoNothing();
-		return { paperId: existing.id, isNew: false };
+		return { paperId: existing.id };
 	}
 
-	// New paper — store PDF, submit OCR, insert record
 	const paperId = crypto.randomUUID();
 	const r2Key = `papers/${hash}.pdf`;
 
@@ -240,18 +192,17 @@ export async function uploadPdf(
 		hash,
 		r2Key,
 		chunks: 0,
-		status: "processing",
+		status: "ocr_pending",
 		jobId,
 		createdAt: now,
 	});
 
-	// Link user
 	await opts.db
 		.insert(userPapers)
 		.values({ userId: opts.userId, paperId, createdAt: now })
 		.onConflictDoNothing();
 
-	return { paperId, isNew: true };
+	return { paperId };
 }
 
 // ── Finalize Paper (OCR done → markdown + chunks) ───────────────────────────
@@ -266,6 +217,9 @@ export async function finalizePaper(
 		env: EmbeddingEnv;
 	},
 ): Promise<{ chunks: number }> {
+	const setStatus = (status: string) =>
+		opts.db.update(papers).set({ status }).where(eq(papers.id, paperId));
+
 	const [paper] = await opts.db
 		.select()
 		.from(papers)
@@ -273,24 +227,71 @@ export async function finalizePaper(
 		.limit(1);
 	if (!paper) throw new Error("Paper not found");
 
+	// Step 1: Fetch OCR markdown
 	const markdown = await fetchOcrMarkdown(jsonlUrl);
 	const markdownR2Key = `papers/${paper.hash}.md`;
 	await opts.r2.put(markdownR2Key, markdown);
-
-	const result = await ingestMarkdown(markdown, {
-		source: paper.r2Key,
-		paperId,
-		db: opts.db,
-		vectorize: opts.vectorize,
-		env: opts.env,
-	});
-
 	await opts.db
 		.update(papers)
-		.set({ status: "ready", markdownR2Key, chunks: result.chunks })
+		.set({ markdownR2Key })
 		.where(eq(papers.id, paperId));
 
-	return { chunks: result.chunks };
+	// Step 2: Chunking
+	await setStatus("chunking");
+	const splitter = new MarkdownTextSplitter({
+		chunkSize: CHUNK_SIZE,
+		chunkOverlap: CHUNK_OVERLAP,
+	});
+	const chunks = await splitter.splitText(markdown);
+
+	if (chunks.length === 0) {
+		await opts.db
+			.update(papers)
+			.set({ status: "ready", chunks: 0 })
+			.where(eq(papers.id, paperId));
+		return { chunks: 0 };
+	}
+
+	const ids = chunks.map(() => crypto.randomUUID());
+	const now = Math.floor(Date.now() / 1000);
+	const rows = chunks.map((content, i) => ({
+		id: ids[i],
+		content,
+		source: paper.r2Key,
+		paperId,
+		createdAt: now,
+	}));
+
+	for (let i = 0; i < rows.length; i += INSERT_BATCH) {
+		await opts.db.insert(documents).values(rows.slice(i, i + INSERT_BATCH));
+	}
+
+	// Step 3: Embedding
+	await setStatus("embedding");
+	const embeddings = createEmbeddings(opts.env);
+	const store = createVectorStore(opts.vectorize, embeddings);
+
+	const docs = chunks.map(
+		(content, i) =>
+			new Document({
+				pageContent: content,
+				metadata: { id: ids[i], paperId },
+			}),
+	);
+
+	try {
+		await store.addDocuments(docs, { ids });
+	} catch (e) {
+		console.warn("[RAG] Vectorize skipped:", (e as Error).message);
+	}
+
+	// Done
+	await opts.db
+		.update(papers)
+		.set({ status: "ready", chunks: chunks.length })
+		.where(eq(papers.id, paperId));
+
+	return { chunks: chunks.length };
 }
 
 // ── User Paper Operations ───────────────────────────────────────────────────
