@@ -21,12 +21,14 @@ import {
 import { createModel, createTitleModel, SYSTEM_PROMPT } from "./model";
 import type { ChatMessagePart, ChatRequestMessage } from "./openrouter";
 import {
+	checkOcrJob,
 	deletePaper,
+	finalizePaper,
 	getPaperMarkdown,
 	ingestMarkdown,
-	ingestPdf,
 	listPapers,
 	retrieveContext,
+	startPdfIngestion,
 } from "./rag";
 import { papers } from "./schema";
 import { tools } from "./tools";
@@ -111,6 +113,8 @@ app.get("/api/papers", async (c) => {
 app.post("/api/papers", async (c) => {
 	const userId = await requireUserId(c);
 	if (!userId) return c.json({ error: "未授权" }, 401);
+	if (!c.env.PADDLE_OCR_TOKEN)
+		return c.json({ error: "缺少 PADDLE_OCR_TOKEN 配置" }, 500);
 
 	const formData = await c.req.formData();
 	const file = formData.get("file") as File | null;
@@ -123,16 +127,75 @@ app.post("/api/papers", async (c) => {
 	const db = createDb(c.env.DB);
 	const buffer = await file.arrayBuffer();
 
-	const result = await ingestPdf(buffer, {
+	const result = await startPdfIngestion(buffer, {
 		title,
 		userId,
 		db,
-		vectorize: c.env.VECTORIZE,
 		r2: c.env.R2,
-		env: c.env,
+		ocrToken: c.env.PADDLE_OCR_TOKEN,
 	});
 
 	return c.json(result, 201);
+});
+
+app.get("/api/papers/:id/status", async (c) => {
+	const userId = await requireUserId(c);
+	if (!userId) return c.json({ error: "未授权" }, 401);
+	if (!c.env.PADDLE_OCR_TOKEN)
+		return c.json({ error: "缺少 PADDLE_OCR_TOKEN 配置" }, 500);
+
+	const db = createDb(c.env.DB);
+	const [paper] = await db
+		.select()
+		.from(papers)
+		.where(eq(papers.id, c.req.param("id")))
+		.limit(1);
+
+	if (!paper || paper.userId !== userId)
+		return c.json({ error: "未找到" }, 404);
+
+	if (paper.status !== "processing" || !paper.jobId) {
+		return c.json({ status: paper.status, chunks: paper.chunks });
+	}
+
+	const job = await checkOcrJob(paper.jobId, c.env.PADDLE_OCR_TOKEN);
+
+	if (job.state === "failed") {
+		await db
+			.update(papers)
+			.set({ status: "failed" })
+			.where(eq(papers.id, paper.id));
+		return c.json({ status: "failed", error: job.error });
+	}
+
+	if (job.state !== "done") {
+		return c.json({ status: "processing", progress: job.progress });
+	}
+
+	if (!job.jsonUrl) {
+		return c.json({ status: "failed", error: "OCR 结果 URL 缺失" });
+	}
+
+	try {
+		const result = await finalizePaper(paper.id, job.jsonUrl, {
+			db,
+			r2: c.env.R2,
+			vectorize: c.env.VECTORIZE,
+			env: c.env,
+			userId,
+		});
+		return c.json({ status: "ready", chunks: result.chunks });
+	} catch (e) {
+		console.error("[Worker] finalize paper:", e);
+		await db
+			.update(papers)
+			.set({ status: "failed" })
+			.where(eq(papers.id, paper.id));
+		return c.json({
+			status: "failed",
+			error: e instanceof Error ? e.message : "处理失败",
+		});
+	}
 });
 
 app.delete("/api/papers/:id", async (c) => {

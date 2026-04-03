@@ -43,6 +43,8 @@ export const papers = sqliteTable("papers", {
 	r2Key: text("r2_key").notNull(),
 	markdownR2Key: text("markdown_r2_key"),
 	chunks: integer("chunks").notNull().default(0),
+	status: text("status").notNull().default("ready"),
+	jobId: text("job_id"),
 	createdAt: integer("created_at", { mode: "number" })
 		.notNull()
 		.default(sql`(strftime('%s', 'now'))`),

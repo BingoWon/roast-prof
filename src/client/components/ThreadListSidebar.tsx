@@ -115,6 +115,7 @@ interface Paper {
 	id: string;
 	title: string;
 	chunks: number;
+	status: string;
 	createdAt: number;
 }
 
@@ -138,6 +139,34 @@ const PapersPanel: FC<{
 	useEffect(() => {
 		fetchPapers();
 	}, [fetchPapers]);
+
+	// Poll processing papers until ready/failed
+	useEffect(() => {
+		const processing = papers.filter((p) => p.status === "processing");
+		if (processing.length === 0) return;
+
+		const interval = setInterval(async () => {
+			let changed = false;
+			for (const p of processing) {
+				try {
+					const res = await fetch(`/api/papers/${p.id}/status`);
+					if (!res.ok) continue;
+					const data = (await res.json()) as {
+						status: string;
+						chunks?: number;
+					};
+					if (data.status !== "processing") {
+						changed = true;
+					}
+				} catch {
+					/* ignore */
+				}
+			}
+			if (changed) fetchPapers();
+		}, 5000);
+
+		return () => clearInterval(interval);
+	}, [papers, fetchPapers]);
 
 	const handleUpload = async (file: File) => {
 		if (!file.name.endsWith(".pdf")) return;
@@ -229,18 +258,32 @@ const PapersPanel: FC<{
 						key={p.id}
 						onClick={(e) => {
 							e.stopPropagation();
-							onPaperSelect?.(p.id, p.title);
+							if (p.status === "ready") onPaperSelect?.(p.id, p.title);
 						}}
-						className="group flex items-center justify-between rounded-lg px-3 py-2.5 text-sm hover:bg-zinc-100 dark:hover:bg-zinc-900 transition cursor-pointer"
+						className={`group flex items-center justify-between rounded-lg px-3 py-2.5 text-sm transition ${
+							p.status === "ready"
+								? "hover:bg-zinc-100 dark:hover:bg-zinc-900 cursor-pointer"
+								: "opacity-60"
+						}`}
 					>
 						<div className="flex items-center gap-2 overflow-hidden min-w-0">
-							<FileText className="w-4 h-4 text-zinc-400 shrink-0" />
+							{p.status === "processing" ? (
+								<Loader2 className="w-4 h-4 text-blue-400 animate-spin shrink-0" />
+							) : (
+								<FileText className="w-4 h-4 text-zinc-400 shrink-0" />
+							)}
 							<div className="min-w-0 flex-1">
 								<div className="truncate text-zinc-700 dark:text-zinc-300 font-medium">
 									{p.title}
 								</div>
 								<div className="flex items-center justify-between text-[10px] text-zinc-400 dark:text-zinc-600">
-									<span>{p.chunks} 个片段</span>
+									{p.status === "processing" ? (
+										<span className="text-blue-400">OCR 解析中...</span>
+									) : p.status === "failed" ? (
+										<span className="text-red-400">解析失败</span>
+									) : (
+										<span>{p.chunks} 个片段</span>
+									)}
 									<span>{timeAgo(p.createdAt)}</span>
 								</div>
 							</div>

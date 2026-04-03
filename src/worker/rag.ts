@@ -3,7 +3,6 @@ import { Document } from "@langchain/core/documents";
 import { OpenAIEmbeddings } from "@langchain/openai";
 import { MarkdownTextSplitter } from "@langchain/textsplitters";
 import { eq, inArray } from "drizzle-orm";
-import { extractText } from "unpdf";
 import type { DbClient } from "./db";
 import { documents, papers } from "./schema";
 
@@ -11,6 +10,9 @@ const CHUNK_SIZE = 512;
 const CHUNK_OVERLAP = 64;
 const INSERT_BATCH = 15;
 const DEFAULT_DIMENSIONS = 1536;
+
+const PADDLE_JOB_URL = "https://paddleocr.aistudio-app.com/api/v2/ocr/jobs";
+const PADDLE_MODEL = "PaddleOCR-VL-1.5";
 
 type EmbeddingEnv = {
 	EMBEDDING_BASE_URL: string;
@@ -33,6 +35,97 @@ function createVectorStore(
 	embeddings: OpenAIEmbeddings,
 ) {
 	return new CloudflareVectorizeStore(embeddings, { index: vectorize });
+}
+
+// ── PaddleOCR Async API ─────────────────────────────────────────────────────
+
+/** Submit a PDF to PaddleOCR for async processing. Returns jobId. */
+export async function submitOcrJob(
+	pdfBuffer: ArrayBuffer,
+	token: string,
+): Promise<string> {
+	const form = new FormData();
+	form.append(
+		"file",
+		new Blob([pdfBuffer], { type: "application/pdf" }),
+		"document.pdf",
+	);
+	form.append("model", PADDLE_MODEL);
+	form.append(
+		"optionalPayload",
+		JSON.stringify({
+			useDocOrientationClassify: false,
+			useDocUnwarping: false,
+			useChartRecognition: false,
+		}),
+	);
+
+	const res = await fetch(PADDLE_JOB_URL, {
+		method: "POST",
+		headers: { Authorization: `bearer ${token}` },
+		body: form,
+	});
+	if (!res.ok) {
+		const text = await res.text();
+		throw new Error(`PaddleOCR submit failed (${res.status}): ${text}`);
+	}
+	const json = (await res.json()) as { data: { jobId: string } };
+	return json.data.jobId;
+}
+
+/** Check PaddleOCR job status. */
+export async function checkOcrJob(
+	jobId: string,
+	token: string,
+): Promise<{
+	state: "pending" | "running" | "done" | "failed";
+	jsonUrl?: string;
+	progress?: { totalPages: number; extractedPages: number };
+	error?: string;
+}> {
+	const res = await fetch(`${PADDLE_JOB_URL}/${jobId}`, {
+		headers: { Authorization: `bearer ${token}` },
+	});
+	if (!res.ok) throw new Error(`PaddleOCR check failed: ${res.status}`);
+
+	const { data } = (await res.json()) as {
+		data: {
+			state: string;
+			resultUrl?: { jsonUrl?: string };
+			extractProgress?: { totalPages: number; extractedPages: number };
+			errorMsg?: string;
+		};
+	};
+
+	return {
+		state: data.state as "pending" | "running" | "done" | "failed",
+		jsonUrl: data.resultUrl?.jsonUrl,
+		progress: data.extractProgress,
+		error: data.errorMsg,
+	};
+}
+
+/** Fetch JSONL result from PaddleOCR and extract concatenated markdown. */
+export async function fetchOcrMarkdown(jsonlUrl: string): Promise<string> {
+	const res = await fetch(jsonlUrl);
+	if (!res.ok) throw new Error(`Failed to fetch OCR result: ${res.status}`);
+
+	const lines = (await res.text()).trim().split("\n");
+	const parts: string[] = [];
+
+	for (const line of lines) {
+		if (!line.trim()) continue;
+		const { result } = JSON.parse(line) as {
+			result: {
+				layoutParsingResults: Array<{ markdown: { text: string } }>;
+			};
+		};
+		for (const page of result.layoutParsingResults) {
+			parts.push(page.markdown.text);
+		}
+	}
+
+	return parts.join("\n\n");
 }
 
 // ── Ingest Markdown ──────────────────────────────────────────────────────────
@@ -99,33 +192,66 @@ export async function ingestMarkdown(
 	return { ids, chunks: chunks.length };
 }
 
-// ── Ingest PDF ───────────────────────────────────────────────────────────────
+// ── Ingest PDF (PaddleOCR async) ────────────────────────────────────────────
 
-export async function ingestPdf(
+/** Store PDF in R2, submit to PaddleOCR, create paper record with "processing" status. */
+export async function startPdfIngestion(
 	pdfBuffer: ArrayBuffer,
 	opts: {
 		title: string;
 		userId: string;
 		db: DbClient;
-		vectorize: VectorizeIndex;
 		r2: R2Bucket;
-		env: EmbeddingEnv;
+		ocrToken: string;
 	},
-): Promise<{ paperId: string; chunks: number }> {
+): Promise<{ paperId: string; jobId: string }> {
 	const paperId = crypto.randomUUID();
 	const r2Key = `papers/${opts.userId}/${paperId}.pdf`;
-	const markdownR2Key = `papers/${opts.userId}/${paperId}.md`;
 	const now = Math.floor(Date.now() / 1000);
 
 	await opts.r2.put(r2Key, pdfBuffer);
 
-	const { text: pages } = await extractText(new Uint8Array(pdfBuffer));
-	const fullText = Array.isArray(pages) ? pages.join("\n\n") : String(pages);
+	const jobId = await submitOcrJob(pdfBuffer, opts.ocrToken);
 
-	await opts.r2.put(markdownR2Key, fullText);
+	await opts.db.insert(papers).values({
+		id: paperId,
+		userId: opts.userId,
+		title: opts.title,
+		r2Key,
+		chunks: 0,
+		status: "processing",
+		jobId,
+		createdAt: now,
+	});
 
-	const result = await ingestMarkdown(fullText, {
-		source: r2Key,
+	return { paperId, jobId };
+}
+
+/** Called when PaddleOCR job is done: fetch markdown, store in R2, chunk + vectorize. */
+export async function finalizePaper(
+	paperId: string,
+	jsonlUrl: string,
+	opts: {
+		db: DbClient;
+		r2: R2Bucket;
+		vectorize: VectorizeIndex;
+		env: EmbeddingEnv;
+		userId: string;
+	},
+): Promise<{ chunks: number }> {
+	const [paper] = await opts.db
+		.select()
+		.from(papers)
+		.where(eq(papers.id, paperId))
+		.limit(1);
+	if (!paper) throw new Error("Paper not found");
+
+	const markdown = await fetchOcrMarkdown(jsonlUrl);
+	const markdownR2Key = `papers/${opts.userId}/${paperId}.md`;
+	await opts.r2.put(markdownR2Key, markdown);
+
+	const result = await ingestMarkdown(markdown, {
+		source: paper.r2Key,
 		userId: opts.userId,
 		paperId,
 		db: opts.db,
@@ -133,17 +259,16 @@ export async function ingestPdf(
 		env: opts.env,
 	});
 
-	await opts.db.insert(papers).values({
-		id: paperId,
-		userId: opts.userId,
-		title: opts.title,
-		r2Key,
-		markdownR2Key,
-		chunks: result.chunks,
-		createdAt: now,
-	});
+	await opts.db
+		.update(papers)
+		.set({
+			status: "ready",
+			markdownR2Key,
+			chunks: result.chunks,
+		})
+		.where(eq(papers.id, paperId));
 
-	return { paperId, chunks: result.chunks };
+	return { chunks: result.chunks };
 }
 
 // ── Delete Paper ─────────────────────────────────────────────────────────────
@@ -187,6 +312,7 @@ export async function listPapers(db: DbClient, userId: string) {
 			id: papers.id,
 			title: papers.title,
 			chunks: papers.chunks,
+			status: papers.status,
 			createdAt: papers.createdAt,
 		})
 		.from(papers)

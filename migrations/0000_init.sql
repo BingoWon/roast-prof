@@ -31,6 +31,8 @@ CREATE TABLE `papers` (
 	`r2_key` text NOT NULL,
 	`markdown_r2_key` text,
 	`chunks` integer DEFAULT 0 NOT NULL,
+	`status` text DEFAULT 'ready' NOT NULL,
+	`job_id` text,
 	`created_at` integer DEFAULT (strftime('%s', 'now')) NOT NULL
 );
 
