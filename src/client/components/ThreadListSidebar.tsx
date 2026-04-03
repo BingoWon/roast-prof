@@ -174,14 +174,17 @@ const PapersPanel: FC<{
 	);
 
 	const handleUpload = async (file: File) => {
-		const ext = file.name.toLowerCase();
-		const valid =
-			ext.endsWith(".pdf") ||
-			ext.endsWith(".png") ||
-			ext.endsWith(".jpg") ||
-			ext.endsWith(".jpeg") ||
-			ext.endsWith(".webp");
-		if (!valid) return;
+		const SUPPORTED = [
+			".pdf",
+			".png",
+			".jpg",
+			".jpeg",
+			".webp",
+			".txt",
+			".md",
+			".docx",
+		];
+		if (!SUPPORTED.some((e) => file.name.toLowerCase().endsWith(e))) return;
 
 		const buffer = await file.arrayBuffer();
 
@@ -364,14 +367,14 @@ const PapersPanel: FC<{
 			>
 				<Upload className="w-5 h-5 text-zinc-400" />
 				<span className="text-xs text-zinc-500 dark:text-zinc-400">
-					拖拽或点击上传 PDF / 图片
+					拖拽或点击上传文件
 				</span>
 			</div>
 
 			<input
 				ref={fileRef}
 				type="file"
-				accept=".pdf,.png,.jpg,.jpeg,.webp"
+				accept=".pdf,.png,.jpg,.jpeg,.webp,.txt,.md,.docx"
 				className="hidden"
 				onChange={(e) => {
 					const file = e.target.files?.[0];

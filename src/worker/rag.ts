@@ -3,6 +3,7 @@ import { Document } from "@langchain/core/documents";
 import { OpenAIEmbeddings } from "@langchain/openai";
 import { MarkdownTextSplitter } from "@langchain/textsplitters";
 import { and, eq, inArray } from "drizzle-orm";
+import mammoth from "mammoth";
 import type { DbClient } from "./db";
 import { documents, papers, userPapers } from "./schema";
 import { isChinese, translateMarkdown } from "./translate";
@@ -93,6 +94,46 @@ async function parseWithPaddleOCR(
 		.join("\n\n");
 }
 
+// ── DOCX → Markdown ─────────────────────────────────────────────────────────
+
+async function parseDocx(buffer: ArrayBuffer): Promise<string> {
+	const result = await mammoth.extractRawText({ arrayBuffer: buffer });
+	return result.value;
+}
+
+// ── File → Markdown dispatcher ──────────────────────────────────────────────
+
+export type FileCategory = "ocr" | "text" | "docx";
+
+export function classifyFile(name: string): {
+	category: FileCategory;
+	ocrType?: 0 | 1;
+} {
+	const ext = name.toLowerCase().split(".").pop() ?? "";
+	if (ext === "pdf") return { category: "ocr", ocrType: 0 };
+	if (["png", "jpg", "jpeg", "webp", "bmp", "tiff"].includes(ext))
+		return { category: "ocr", ocrType: 1 };
+	if (["txt", "md", "markdown"].includes(ext)) return { category: "text" };
+	if (["docx"].includes(ext)) return { category: "docx" };
+	return { category: "text" };
+}
+
+async function extractMarkdown(
+	buffer: ArrayBuffer,
+	category: FileCategory,
+	ocrType: 0 | 1 | undefined,
+	ocrToken: string,
+): Promise<string> {
+	switch (category) {
+		case "text":
+			return new TextDecoder().decode(buffer);
+		case "docx":
+			return parseDocx(buffer);
+		case "ocr":
+			return parseWithPaddleOCR(buffer, ocrToken, ocrType ?? 0);
+	}
+}
+
 // ── Hash Check ──────────────────────────────────────────────────────────────
 
 export async function checkPaperByHash(
@@ -125,7 +166,8 @@ export async function ingestFile(
 	fileBuffer: ArrayBuffer,
 	opts: {
 		fileName?: string;
-		fileType: 0 | 1;
+		category: FileCategory;
+		ocrType?: 0 | 1;
 		userId: string;
 		db: DbClient;
 		r2: R2Bucket;
@@ -136,7 +178,8 @@ export async function ingestFile(
 ): Promise<{ paperId: string; chunks: number }> {
 	const { db, onStatus } = opts;
 	const hash = await hashBuffer(fileBuffer);
-	const ext = opts.fileType === 0 ? "pdf" : "img";
+	const ext =
+		opts.category === "docx" ? "docx" : opts.ocrType === 1 ? "img" : "pdf";
 	const now = Math.floor(Date.now() / 1000);
 
 	// Dedup check
@@ -184,10 +227,11 @@ export async function ingestFile(
 	// Step 2: Parse (PaddleOCR sync)
 	onStatus("parsing", { paperId });
 	await setStatus("parsing");
-	const markdown = await parseWithPaddleOCR(
+	const markdown = await extractMarkdown(
 		fileBuffer,
+		opts.category,
+		opts.ocrType,
 		opts.env.PADDLE_OCR_TOKEN,
-		opts.fileType,
 	);
 	const markdownR2Key = `papers/${hash}.md`;
 	await opts.r2.put(markdownR2Key, markdown);

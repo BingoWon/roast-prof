@@ -22,6 +22,7 @@ import {
 import { createModel, createTitleModel, SYSTEM_PROMPT } from "./model";
 import {
 	checkPaperByHash,
+	classifyFile,
 	getPaperMarkdown,
 	ingestFile,
 	listUserPapers,
@@ -110,23 +111,13 @@ app.get("/api/papers/check", async (c) => {
 app.post("/api/papers", async (c) => {
 	const userId = await requireUserId(c);
 	if (!userId) return c.json({ error: "未授权" }, 401);
-	if (!c.env.PADDLE_OCR_TOKEN)
-		return c.json({ error: "缺少 PADDLE_OCR_TOKEN 配置" }, 500);
-
 	const formData = await c.req.formData();
 	const file = formData.get("file") as File | null;
 	if (!file) return c.json({ error: "缺少文件" }, 400);
 
-	const IMAGE_EXTS = [".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tiff"];
-	const name = file.name.toLowerCase();
-	const isPdf = name.endsWith(".pdf");
-	const isImage = IMAGE_EXTS.some((ext) => name.endsWith(ext));
-
-	if (!isPdf && !isImage) {
-		return c.json({ error: "请上传 PDF 或图片文件" }, 400);
-	}
-
-	const fileType: 0 | 1 = isPdf ? 0 : 1;
+	const classified = classifyFile(file.name);
+	if (classified.category === "ocr" && !c.env.PADDLE_OCR_TOKEN)
+		return c.json({ error: "缺少 PADDLE_OCR_TOKEN 配置" }, 500);
 	const db = createDb(c.env.DB);
 	const buffer = await file.arrayBuffer();
 	const encoder = new TextEncoder();
@@ -142,7 +133,8 @@ app.post("/api/papers", async (c) => {
 			try {
 				await ingestFile(buffer, {
 					fileName: file.name.replace(/\.[^.]+$/, ""),
-					fileType,
+					category: classified.category,
+					ocrType: classified.ocrType,
 					userId,
 					db,
 					r2: c.env.R2,
