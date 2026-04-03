@@ -56,7 +56,7 @@ const SearchCard: FC<{
 	const handleSubmit = () => {
 		if (!canSubmit || !addToolResult) return;
 		addToolResult({
-			tool: "suggest_paper_search",
+			tool: "rag_suggest",
 			toolCallId,
 			output: { query: activeQuery, topK },
 		});
@@ -65,7 +65,7 @@ const SearchCard: FC<{
 	const handleAutoSelect = () => {
 		if (!addToolResult) return;
 		addToolResult({
-			tool: "suggest_paper_search",
+			tool: "rag_suggest",
 			toolCallId,
 			output: { query: queries[0] ?? "", topK },
 		});
@@ -77,7 +77,7 @@ const SearchCard: FC<{
 			<div className="flex items-center justify-between px-4 py-3 border-b border-zinc-100/60 dark:border-zinc-700/40">
 				<div className="flex items-center gap-2 text-sm font-medium text-zinc-800 dark:text-zinc-200">
 					<BookOpen className="w-4 h-4 text-blue-500" />
-					论文检索
+					论文 RAG 检索
 				</div>
 				<span className="text-[10px] px-2 py-0.5 rounded-full bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400">
 					等待确认

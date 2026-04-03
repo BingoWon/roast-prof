@@ -194,7 +194,7 @@ function App() {
 			<Show when="signed-in">
 				<div
 					ref={containerRef}
-					className="flex-1 flex h-full overflow-hidden p-2 gap-1.5 z-10"
+					className={`flex-1 flex h-full overflow-hidden pt-2 pb-2 gap-1.5 z-10 ${layout.leftCollapsed ? "pl-0" : "pl-2"} ${layout.rightCollapsed ? "pr-0" : "pr-2"}`}
 				>
 					{/* 左栏 */}
 					{layout.leftCollapsed ? (

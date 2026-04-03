@@ -155,8 +155,8 @@ const AssistantMessage: FC = () => (
 						by_name: {
 							get_weather: WeatherToolUI,
 							search_web: SearchToolUI,
-							suggest_paper_search: SuggestSearchToolUI,
-							search_papers: PaperSearchToolUI,
+							rag_suggest: SuggestSearchToolUI,
+							rag_search: PaperSearchToolUI,
 							update_recipe: RecipeToolUI,
 						},
 					},

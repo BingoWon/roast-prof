@@ -1,4 +1,5 @@
 import {
+	convertToModelMessages,
 	createUIMessageStream,
 	createUIMessageStreamResponse,
 	stepCountIs,
@@ -19,7 +20,6 @@ import {
 	updateThreadTitle,
 } from "./db";
 import { createModel, createTitleModel, SYSTEM_PROMPT } from "./model";
-import type { ChatMessagePart, ChatRequestMessage } from "./openrouter";
 import {
 	checkPaperByHash,
 	getPaperMarkdown,
@@ -262,66 +262,18 @@ app.get("/api/health", (c) => c.json({ status: "ok" }));
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function extractLastUserText(messages: ChatRequestMessage[]): string {
+// biome-ignore lint/suspicious/noExplicitAny: UIMessage wire format
+type WireMessage = Record<string, any>;
+
+function extractLastUserText(messages: WireMessage[]): string {
+	const last = [...messages].reverse().find((m) => m.role === "user");
+	if (!last?.parts) return last?.content ?? "";
 	return (
-		[...messages]
-			.reverse()
-			.find((m) => m.role === "user")
-			?.parts?.filter(
-				(p): p is { type: "text"; text: string } => p.type === "text",
-			)
-			.map((p) => p.text)
+		last.parts
+			.filter((p: { type: string }) => p.type === "text")
+			.map((p: { text: string }) => p.text)
 			.join(" ") ?? ""
 	);
-}
-
-function partsToText(parts: ChatMessagePart[], fallback?: string): string {
-	return (
-		parts
-			.filter(
-				(p): p is Extract<ChatMessagePart, { type: "text" }> =>
-					p.type === "text",
-			)
-			.map((p) => p.text)
-			.join("") ||
-		fallback ||
-		""
-	);
-}
-
-function toAIMessages(msgs: ChatRequestMessage[]) {
-	return msgs.map((m) => {
-		const role = m.role as "user" | "assistant" | "system";
-		const parts = m.parts ?? [];
-
-		if (role !== "user") {
-			return { role, content: partsToText(parts, m.content) };
-		}
-
-		const hasMedia = parts.some(
-			(p) => p.type === "image" || p.type === "image_url",
-		);
-		if (!hasMedia) {
-			return { role, content: partsToText(parts, m.content) };
-		}
-
-		const content: Array<
-			{ type: "text"; text: string } | { type: "image"; image: string }
-		> = [];
-		for (const p of parts) {
-			if (p.type === "text" && p.text) {
-				content.push({ type: "text", text: p.text });
-			} else if (p.type === "image") {
-				const url = p.image ?? p.url;
-				if (url) content.push({ type: "image", image: url });
-			} else if (p.type === "image_url") {
-				const url = p.image_url?.url ?? p.url;
-				if (url) content.push({ type: "image", image: url });
-			}
-		}
-
-		return { role, content };
-	});
 }
 
 // ── Chat (AI SDK streamText + Assistant-UI) ──────────────────────────────────
@@ -329,7 +281,7 @@ function toAIMessages(msgs: ChatRequestMessage[]) {
 app.post("/api/chat", async (c) => {
 	try {
 		const { messages } = await c.req.json<{
-			messages: ChatRequestMessage[];
+			messages: WireMessage[];
 		}>();
 		const threadId = c.req.header("x-thread-id") || undefined;
 		const userId = await requireUserId(c);
@@ -401,10 +353,14 @@ app.post("/api/chat", async (c) => {
 
 		const uiStream = createUIMessageStream({
 			execute: async ({ writer }) => {
+				const modelMessages = await convertToModelMessages(
+					// biome-ignore lint/suspicious/noExplicitAny: wire format → UIMessage
+					messages as any,
+				);
 				const chatResult = streamText({
 					model: wrappedModel,
 					system: systemPrompt,
-					messages: toAIMessages(messages),
+					messages: modelMessages,
 					tools: { ...staticTools, ...ragTools },
 					stopWhen: stepCountIs(5),
 				});

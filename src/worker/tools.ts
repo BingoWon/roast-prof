@@ -132,9 +132,9 @@ export function createRagTools(opts: {
 	env: RagEnv;
 }) {
 	return {
-		suggest_paper_search: tool({
+		rag_suggest: tool({
 			description:
-				"当用户提问与论文相关的问题时，先调用此工具生成 3 个候选检索查询供用户选择。生成的查询应从不同角度覆盖用户的问题。此工具会暂停等待用户选择。",
+				"论文 RAG 检索建议。当用户要求搜索论文、RAG 检索或提问与论文相关的问题时，先调用此工具生成 3 个候选查询供用户选择。此工具会暂停等待用户选择。",
 			inputSchema: zodSchema(
 				z.object({
 					queries: z
@@ -152,9 +152,9 @@ export function createRagTools(opts: {
 			// No execute — blocks until frontend calls addToolResult
 		}),
 
-		search_papers: tool({
+		rag_search: tool({
 			description:
-				"在用户上传的论文中执行检索。仅在用户确认检索参数后调用，或用户明确要求直接搜索时调用。",
+				"论文 RAG 检索执行。在用户确认检索参数后调用，或用户明确要求直接 RAG 搜索时调用。",
 			inputSchema: zodSchema(
 				z.object({
 					query: z.string().describe("检索查询"),
