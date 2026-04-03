@@ -121,7 +121,6 @@ export function useThreads() {
 	return {
 		threads,
 		activeThreadId,
-		activeThread: threads.find((t) => t.id === activeThreadId) ?? null,
 		setActiveThreadId,
 		createThread,
 		deleteThread,

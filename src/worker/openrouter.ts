@@ -1,18 +1,3 @@
-// ── Wire format types for Assistant-UI → Worker communication ─────────────────
-
-export type ChatMessagePart =
-	| { type: "text"; text: string }
-	| { type: "image"; image?: string; url?: string }
-	| { type: "image_url"; image_url?: { url: string }; url?: string }
-	| { type: "file"; mediaType?: string; url?: string; name?: string };
-
-export type ChatRequestMessage = {
-	id?: string;
-	role: string;
-	parts?: ChatMessagePart[];
-	content?: string;
-};
-
 // ── SSE streaming transform ─────────────────────────────────────────────────
 // OpenRouter returns `delta.reasoning` for reasoning models.
 // We inject it into `<think>...</think>` tags for extractReasoningMiddleware.
