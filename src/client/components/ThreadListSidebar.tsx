@@ -177,6 +177,19 @@ const PapersPanel: FC<{
 	const [papers, setPapers] = useState<Paper[]>([]);
 	const [dragOver, setDragOver] = useState(false);
 	const fileRef = useRef<HTMLInputElement>(null);
+	const panelRef = useRef<HTMLDivElement>(null);
+
+	// Ctrl/Cmd+V paste upload
+	useEffect(() => {
+		const el = panelRef.current;
+		if (!el) return;
+		const handler = (e: ClipboardEvent) => {
+			const file = e.clipboardData?.files[0];
+			if (file) handleUpload(file);
+		};
+		el.addEventListener("paste", handler);
+		return () => el.removeEventListener("paste", handler);
+	});
 
 	const fetchPapers = useCallback(async () => {
 		try {
@@ -319,7 +332,10 @@ const PapersPanel: FC<{
 									{
 										method: "POST",
 										headers: { "Content-Type": "application/json" },
-										body: JSON.stringify({ fileName: data.fileName }),
+										body: JSON.stringify({
+											fileName: data.fileName,
+											fileExt: file.name.split(".").pop()?.toLowerCase(),
+										}),
 									},
 								);
 								if (titleRes.ok) {
@@ -370,7 +386,10 @@ const PapersPanel: FC<{
 		// biome-ignore lint/a11y/useKeyWithClickEvents: full area drop zone
 		// biome-ignore lint/a11y/noStaticElementInteractions: full area drop zone
 		<div
-			className={`flex-1 flex flex-col overflow-hidden transition-colors ${
+			ref={panelRef}
+			// biome-ignore lint/a11y/noNoninteractiveTabindex: paste target
+			tabIndex={0}
+			className={`flex-1 flex flex-col overflow-hidden transition-colors outline-none ${
 				dragOver ? "bg-blue-50 dark:bg-blue-900/10" : ""
 			}`}
 			onDrop={onDrop}
@@ -395,7 +414,10 @@ const PapersPanel: FC<{
 			>
 				<Upload className="w-5 h-5 text-zinc-400" />
 				<span className="text-xs text-zinc-500 dark:text-zinc-400">
-					拖拽或点击上传文件
+					拖拽、点击或粘贴上传
+				</span>
+				<span className="text-[10px] text-zinc-400 dark:text-zinc-600">
+					PDF · 图片 · TXT · MD · DOCX
 				</span>
 			</div>
 

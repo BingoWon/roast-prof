@@ -234,9 +234,9 @@ app.post("/api/papers/:id/generate-title", async (c) => {
 
 	const db = createDb(c.env.DB);
 	const paperId = c.req.param("id");
-	const { fileName } = await c.req
-		.json<{ fileName?: string }>()
-		.catch(() => ({ fileName: undefined }));
+	const { fileName, fileExt } = await c.req
+		.json<{ fileName?: string; fileExt?: string }>()
+		.catch(() => ({ fileName: undefined, fileExt: undefined }));
 
 	const md = await getPaperMarkdown(paperId, {
 		db,
@@ -246,11 +246,15 @@ app.post("/api/papers/:id/generate-title", async (c) => {
 	if (!md) return c.json({ error: "未找到" }, 404);
 
 	const excerpt = md.slice(0, 500);
-	const hint = fileName ? `\n文件名参考：${fileName}` : "";
+	const hints: string[] = [];
+	if (fileName) hints.push(`文件名：${fileName}`);
+	if (fileExt) hints.push(`格式：${fileExt}`);
+	const hintStr = hints.length > 0 ? `\n参考信息：${hints.join("，")}` : "";
 	const titleModel = createTitleModel(c.env);
 	const result = streamText({
 		model: titleModel,
-		prompt: `根据以下资料内容生成简洁中文标题，6-12个字，无标点无引号，只回复标题：${hint}\n${excerpt}`,
+		prompt: `根据以下资料内容生成简洁中文标题，6-12个字，无标点无引号，只回复标题：${hintStr}\n${excerpt}`,
+		providerOptions: { openrouter: { reasoning: { effort: "none" } } },
 	});
 
 	let title = "";
@@ -383,6 +387,11 @@ app.post("/api/chat", async (c) => {
 							const titleResult = streamText({
 								model: createTitleModel(c.env),
 								prompt: `为以下用户消息生成简洁中文标题，4-8个字，无标点无引号，只回复标题：\n${firstUserText}`,
+								providerOptions: {
+									openrouter: {
+										reasoning: { effort: "none" },
+									},
+								},
 							});
 
 							let fullTitle = "";

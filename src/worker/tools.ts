@@ -134,7 +134,7 @@ export function createRagTools(opts: {
 	return {
 		rag_suggest: tool({
 			description:
-				"资料 RAG 检索建议。当用户要求搜索资料、RAG 检索或提问与资料相关的问题时，先调用此工具生成 3 个候选查询供用户选择。此工具会暂停等待用户选择。",
+				"资料 RAG 检索建议。当用户要求搜索资料、RAG 检索或提问与资料相关的问题时，先调用此工具生成 3 个候选查询供用户选择。",
 			inputSchema: zodSchema(
 				z.object({
 					queries: z
@@ -149,7 +149,10 @@ export function createRagTools(opts: {
 						.describe("推荐的检索结果数量"),
 				}),
 			),
-			// No execute — blocks until frontend calls addToolResult
+			execute: async (input) => ({
+				...input,
+				papers: opts.paperIds.length,
+			}),
 		}),
 
 		rag_search: tool({
