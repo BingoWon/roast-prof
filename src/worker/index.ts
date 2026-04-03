@@ -295,6 +295,29 @@ app.get("/api/health", (c) => c.json({ status: "ok" }));
 // biome-ignore lint/suspicious/noExplicitAny: UIMessage wire format
 type WireMessage = Record<string, any>;
 
+/**
+ * Resolve data: URLs in wire messages BEFORE convertToModelMessages.
+ * Strip "data:<mime>;base64," prefix → raw base64 string for ALL file types.
+ * This prevents the AI SDK's downloadAssets from trying to fetch data: URLs.
+ * The @ai-sdk/openai provider re-wraps the base64 into the correct wire format
+ * (image_url for images, { file: { file_data } } for PDFs, etc.).
+ */
+function resolveDataUrls(messages: WireMessage[]): WireMessage[] {
+	return messages.map((msg) => {
+		if (!Array.isArray(msg.parts)) return msg;
+		const parts = msg.parts.map(
+			// biome-ignore lint/suspicious/noExplicitAny: flexible wire part
+			(part: any) => {
+				if (typeof part.url !== "string") return part;
+				const match = part.url.match(/^data:([^;]+);base64,(.+)$/s);
+				if (!match) return part;
+				return { ...part, url: match[2], mediaType: match[1] };
+			},
+		);
+		return { ...msg, parts };
+	});
+}
+
 function extractLastUserText(messages: WireMessage[]): string {
 	const last = [...messages].reverse().find((m) => m.role === "user");
 	if (!last?.parts) return last?.content ?? "";
@@ -389,7 +412,7 @@ app.post("/api/chat", async (c) => {
 			execute: async ({ writer }) => {
 				const modelMessages = await convertToModelMessages(
 					// biome-ignore lint/suspicious/noExplicitAny: wire format → UIMessage
-					messages as any,
+					resolveDataUrls(messages) as any,
 				);
 				const chatResult = streamText({
 					model: wrappedModel,

@@ -27,7 +27,7 @@ export function transformReasoningSSE(response: Response): Response {
 					if (inReasoning) {
 						const closing = { choices: [{ delta: { content: "</think>" } }] };
 						controller.enqueue(
-							encoder.encode(`data: ${JSON.stringify(closing)}\n`),
+							encoder.encode(`data: ${JSON.stringify(closing)}\n\n`),
 						);
 						inReasoning = false;
 					}
@@ -41,6 +41,11 @@ export function transformReasoningSSE(response: Response): Response {
 
 					if (Array.isArray(json.choices)) {
 						for (const choice of json.choices) {
+							// Strip file annotations — AI SDK rejects OpenRouter's format
+							if (choice.delta?.annotations) {
+								delete choice.delta.annotations;
+								modified = true;
+							}
 							if (
 								typeof choice.delta?.reasoning === "string" &&
 								choice.delta.reasoning.length > 0
@@ -84,7 +89,7 @@ export function transformReasoningSSE(response: Response): Response {
 			if (inReasoning) {
 				const closing = { choices: [{ delta: { content: "</think>" } }] };
 				controller.enqueue(
-					encoder.encode(`data: ${JSON.stringify(closing)}\n`),
+					encoder.encode(`data: ${JSON.stringify(closing)}\n\n`),
 				);
 			}
 			if (buffer) controller.enqueue(encoder.encode(buffer));

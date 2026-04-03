@@ -1,8 +1,12 @@
 import { type UIMessage as Message, useChat } from "@ai-sdk/react";
-import type { ToolCallMessagePartProps } from "@assistant-ui/react";
+import type {
+	AttachmentAdapter,
+	ToolCallMessagePartProps,
+} from "@assistant-ui/react";
 import {
 	ActionBarPrimitive,
 	AssistantRuntimeProvider,
+	AttachmentPrimitive,
 	BranchPickerPrimitive,
 	ComposerPrimitive,
 	MessagePrimitive,
@@ -17,9 +21,11 @@ import {
 	ChevronLeft,
 	ChevronRight,
 	Copy,
+	Paperclip,
 	RefreshCw,
 	Send,
 	Trash2,
+	X,
 } from "lucide-react";
 import {
 	createContext,
@@ -40,10 +46,79 @@ import { SearchToolUI } from "./components/tools/SearchToolUI";
 import { ToolCallFallback } from "./components/tools/ToolCallFallback";
 import { WeatherToolUI } from "./components/tools/WeatherToolUI";
 
+// ── Attachment Adapter ───────────────────────────────────────────────────────
+// Universal adapter that handles all file types:
+//   - Images → ImageMessagePart (data URL)
+//   - Text   → TextMessagePart  (inline content, no XML wrapper)
+//   - Others → FileMessagePart  (data URL — PDFs, audio, video)
+
+const readAsDataURL = (file: File): Promise<string> =>
+	new Promise((resolve, reject) => {
+		const r = new FileReader();
+		r.onload = () => resolve(r.result as string);
+		r.onerror = reject;
+		r.readAsDataURL(file);
+	});
+
+const attachmentAdapter: AttachmentAdapter = {
+	accept: "image/*,application/pdf,video/*,audio/*",
+	async add({ file }) {
+		const isImage = file.type.startsWith("image/");
+		return {
+			id: file.name,
+			type: isImage ? "image" : "document",
+			name: file.name,
+			contentType: file.type,
+			file,
+			status: { type: "requires-action", reason: "composer-send" },
+		};
+	},
+	async send(attachment) {
+		const { file } = attachment;
+		const url = await readAsDataURL(file);
+		if (file.type.startsWith("image/")) {
+			return {
+				...attachment,
+				status: { type: "complete" },
+				content: [{ type: "image", image: url }],
+			};
+		}
+		return {
+			...attachment,
+			status: { type: "complete" },
+			content: [{ type: "file", data: url, mimeType: file.type }],
+		};
+	},
+	async remove() {},
+};
+
 // ── Recipe Update Context ────────────────────────────────────────────────────
 
 const RecipeUpdateCtx = createContext<((data: Partial<Recipe>) => void) | null>(
 	null,
+);
+
+// ── Attachment Components ────────────────────────────────────────────────────
+
+const UserAttachment: FC = () => (
+	<AttachmentPrimitive.Root className="group relative flex items-center gap-2 rounded-xl bg-black/5 dark:bg-white/5 px-3 py-2 border border-zinc-200/50 dark:border-white/5">
+		<AttachmentPrimitive.unstable_Thumb className="h-9 w-9 shrink-0 rounded-lg bg-zinc-200 dark:bg-white/10 object-cover" />
+		<span className="truncate text-xs text-zinc-600 dark:text-white/70 max-w-[120px]">
+			<AttachmentPrimitive.Name />
+		</span>
+	</AttachmentPrimitive.Root>
+);
+
+const ComposerAttachment: FC = () => (
+	<AttachmentPrimitive.Root className="group relative flex items-center gap-2.5 rounded-xl bg-zinc-100 dark:bg-zinc-800 px-3 py-2 border border-zinc-200 dark:border-zinc-700">
+		<AttachmentPrimitive.unstable_Thumb className="h-10 w-10 shrink-0 rounded-lg bg-zinc-200 dark:bg-zinc-900 object-cover" />
+		<span className="truncate text-xs font-medium text-zinc-700 dark:text-zinc-300 max-w-[120px]">
+			<AttachmentPrimitive.Name />
+		</span>
+		<AttachmentPrimitive.Remove className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-zinc-400 dark:bg-zinc-600 text-white shadow transition-transform hover:scale-110 active:scale-95 cursor-pointer">
+			<X className="w-3 h-3" />
+		</AttachmentPrimitive.Remove>
+	</AttachmentPrimitive.Root>
 );
 
 // ── Branch Picker ─────────────────────────────────────────────────────────────
@@ -99,6 +174,11 @@ const AssistantActionBar: FC = () => (
 const UserMessage: FC = () => (
 	<MessagePrimitive.Root className="ml-auto flex max-w-[85%] flex-col items-end mb-6 group">
 		<div className="relative rounded-3xl rounded-tr-sm bg-gradient-to-br from-zinc-100 to-zinc-200 dark:from-zinc-800 dark:to-zinc-900 px-6 py-4 text-zinc-900 dark:text-zinc-100 shadow-xl dark:shadow-2xl border border-zinc-300/50 dark:border-white/5 backdrop-blur-xl">
+			<div className="mb-2 flex flex-wrap gap-2 empty:hidden">
+				<MessagePrimitive.Attachments
+					components={{ Attachment: UserAttachment }}
+				/>
+			</div>
 			<div className="leading-relaxed whitespace-pre-wrap text-sm flex flex-col gap-2">
 				<MessagePrimitive.Parts />
 			</div>
@@ -274,7 +354,9 @@ export function Chat({
 		);
 	}, [chat.status, onLoadingChange]);
 
-	const runtime = useAISDKRuntime(chat);
+	const runtime = useAISDKRuntime(chat, {
+		adapters: { attachments: attachmentAdapter },
+	});
 
 	useEffect(() => {
 		if (registerImprove) {
@@ -330,8 +412,19 @@ export function Chat({
 						</ThreadPrimitive.Viewport>
 
 						<ThreadPrimitive.ViewportFooter className="pb-4 pt-3 px-3 sticky bottom-0 bg-gradient-to-t from-white/50 via-white/40 dark:from-zinc-900/50 dark:via-zinc-900/40 to-transparent backdrop-blur-sm z-30">
-							<ComposerPrimitive.Root className="flex w-full flex-col gap-2 rounded-2xl bg-white/70 dark:bg-zinc-800/70 p-2 shadow-sm border border-white/60 dark:border-zinc-700/50 backdrop-blur-xl transition-all focus-within:border-blue-400/40 focus-within:ring-2 focus-within:ring-blue-400/10">
-								<div className="flex items-end gap-2">
+							<ComposerPrimitive.Root className="flex w-full flex-col rounded-2xl bg-white/70 dark:bg-zinc-800/70 p-2 shadow-sm border border-white/60 dark:border-zinc-700/50 backdrop-blur-xl transition-all focus-within:border-blue-400/40 focus-within:ring-2 focus-within:ring-blue-400/10">
+								<div className="flex flex-wrap gap-2 px-1 pt-1 pb-0 empty:hidden">
+									<ComposerPrimitive.Attachments
+										components={{ Attachment: ComposerAttachment }}
+									/>
+								</div>
+								<div className="flex items-end gap-1">
+									<ComposerPrimitive.AddAttachment
+										className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-zinc-400 dark:text-zinc-500 transition-all hover:bg-zinc-100 dark:hover:bg-zinc-700 hover:text-zinc-600 dark:hover:text-zinc-300 active:scale-95 cursor-pointer"
+										title="添加附件"
+									>
+										<Paperclip className="h-4 w-4" />
+									</ComposerPrimitive.AddAttachment>
 									<ComposerPrimitive.Input
 										placeholder="输入消息..."
 										rows={1}
