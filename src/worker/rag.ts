@@ -7,21 +7,22 @@ import { extractText } from "unpdf";
 import type { DbClient } from "./db";
 import { documents, papers } from "./schema";
 
-const DIMENSIONS = 1536;
 const CHUNK_SIZE = 512;
 const CHUNK_OVERLAP = 64;
 const INSERT_BATCH = 15;
+const DEFAULT_DIMENSIONS = 1536;
 
 type EmbeddingEnv = {
 	EMBEDDING_BASE_URL: string;
 	EMBEDDING_API_KEY: string;
 	EMBEDDING_MODEL: string;
+	EMBEDDING_DIMENSIONS?: string;
 };
 
 function createEmbeddings(env: EmbeddingEnv) {
 	return new OpenAIEmbeddings({
 		model: env.EMBEDDING_MODEL,
-		dimensions: DIMENSIONS,
+		dimensions: Number(env.EMBEDDING_DIMENSIONS) || DEFAULT_DIMENSIONS,
 		apiKey: env.EMBEDDING_API_KEY,
 		configuration: { baseURL: env.EMBEDDING_BASE_URL },
 	});

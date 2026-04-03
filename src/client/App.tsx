@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Chat } from "./Chat";
 import { CollapsedHandle } from "./components/CollapsedHandle";
 import { Divider } from "./components/Divider";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 import { PaperViewer } from "./components/PaperViewer";
 import {
 	INITIAL_RECIPE,
@@ -251,18 +252,20 @@ function App() {
 								</div>
 							)}
 							{!loading && activeThreadId && chatReady && (
-								<Chat
-									key={`${activeThreadId}-${initialMessages.length}`}
-									threadId={activeThreadId}
-									initialMessages={initialMessages}
-									onTitleUpdate={handleTitleUpdate}
-									recipe={recipe}
-									onRecipeUpdate={handleRecipeUpdate}
-									onLoadingChange={setIsAiLoading}
-									registerImprove={(fn) => {
-										improveRef.current = fn;
-									}}
-								/>
+								<ErrorBoundary>
+									<Chat
+										key={activeThreadId}
+										threadId={activeThreadId}
+										initialMessages={initialMessages}
+										onTitleUpdate={handleTitleUpdate}
+										recipe={recipe}
+										onRecipeUpdate={handleRecipeUpdate}
+										onLoadingChange={setIsAiLoading}
+										registerImprove={(fn) => {
+											improveRef.current = fn;
+										}}
+									/>
+								</ErrorBoundary>
 							)}
 						</div>
 					)}

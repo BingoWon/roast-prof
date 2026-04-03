@@ -5,4 +5,7 @@ import { defineConfig } from "vite";
 
 export default defineConfig({
 	plugins: [cloudflare(), react(), tailwindcss()],
+	optimizeDeps: {
+		entries: ["index.html", "src/**/*.{ts,tsx}"],
+	},
 });

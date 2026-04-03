@@ -86,7 +86,10 @@ export async function saveMessages(
 		.onConflictDoNothing({ target: messages.id });
 }
 
-export async function touchThread(db: DbClient, id: string) {
+export async function touchThread(db: DbClient, id: string, userId: string) {
 	const now = Math.floor(Date.now() / 1000);
-	return db.update(threads).set({ updatedAt: now }).where(eq(threads.id, id));
+	return db
+		.update(threads)
+		.set({ updatedAt: now })
+		.where(and(eq(threads.id, id), eq(threads.userId, userId)));
 }

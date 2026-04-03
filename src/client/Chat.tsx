@@ -21,13 +21,26 @@ import {
 	Send,
 	Trash2,
 } from "lucide-react";
-import { type FC, useEffect, useMemo, useRef } from "react";
+import {
+	createContext,
+	type FC,
+	useContext,
+	useEffect,
+	useMemo,
+	useRef,
+} from "react";
 import { ReasoningPart } from "./components/message/ReasoningPart";
 import { TextPart } from "./components/message/TextPart";
 import type { Recipe } from "./components/RecipePanel";
 import { SearchToolUI } from "./components/tools/SearchToolUI";
 import { ToolCallFallback } from "./components/tools/ToolCallFallback";
 import { WeatherToolUI } from "./components/tools/WeatherToolUI";
+
+// ── Recipe Update Context ────────────────────────────────────────────────────
+
+const RecipeUpdateCtx = createContext<((data: Partial<Recipe>) => void) | null>(
+	null,
+);
 
 // ── Branch Picker ─────────────────────────────────────────────────────────────
 
@@ -143,24 +156,16 @@ const AssistantMessage: FC = () => (
 
 // ── Recipe Tool UI ────────────────────────────────────────────────────────────
 
-let _recipeUpdateCallback: ((data: Partial<Recipe>) => void) | null = null;
-
-export function setRecipeUpdateCallback(
-	cb: ((data: Partial<Recipe>) => void) | null,
-) {
-	_recipeUpdateCallback = cb;
-}
-
 const RecipeToolUI: FC<ToolCallMessagePartProps> = ({ result, isError }) => {
+	const onRecipeUpdate = useContext(RecipeUpdateCtx);
 	const appliedRef = useRef(false);
 
 	useEffect(() => {
 		if (result && !isError && !appliedRef.current) {
 			appliedRef.current = true;
-			const data = result as Partial<Recipe>;
-			_recipeUpdateCallback?.(data);
+			onRecipeUpdate?.(result as Partial<Recipe>);
 		}
-	}, [result, isError]);
+	}, [result, isError, onRecipeUpdate]);
 
 	if (isError)
 		return <div className="mb-2 text-xs text-red-500">食谱更新失败</div>;
@@ -233,11 +238,6 @@ export function Chat({
 	const onTitleRef = useRef(onTitleUpdate);
 	onTitleRef.current = onTitleUpdate;
 
-	useEffect(() => {
-		setRecipeUpdateCallback(onRecipeUpdate);
-		return () => setRecipeUpdateCallback(null);
-	}, [onRecipeUpdate]);
-
 	const transport = useMemo(
 		() =>
 			new DefaultChatTransport({
@@ -283,56 +283,58 @@ export function Chat({
 	}, [registerImprove, recipe, runtime]);
 
 	return (
-		<AssistantRuntimeProvider runtime={runtime}>
-			<div className="flex h-full w-full flex-col relative overflow-hidden font-sans">
-				<ThreadPrimitive.Root className="flex flex-col h-full w-full relative z-10">
-					<ThreadPrimitive.Viewport className="flex-1 overflow-y-auto px-3 py-6 scroll-smooth">
-						<ThreadPrimitive.Empty>
-							<RecipeEmptyState
-								onSend={(text) =>
-									runtime.thread.append({
-										role: "user",
-										content: [{ type: "text", text }],
-									})
-								}
-							/>
-						</ThreadPrimitive.Empty>
-
-						<ThreadPrimitive.Messages
-							components={{ UserMessage, AssistantMessage }}
-						/>
-
-						<ThreadPrimitive.ScrollToBottom className="fixed bottom-36 right-4 flex h-8 w-8 items-center justify-center rounded-full bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-zinc-500 shadow-lg transition-all opacity-0 data-[visible]:opacity-100 z-20 cursor-pointer">
-							<ChevronDown className="h-4 w-4" />
-						</ThreadPrimitive.ScrollToBottom>
-					</ThreadPrimitive.Viewport>
-
-					<ThreadPrimitive.ViewportFooter className="pb-4 pt-3 px-3 sticky bottom-0 bg-gradient-to-t from-zinc-50 via-zinc-50/95 dark:from-zinc-950 dark:via-zinc-950/95 to-transparent backdrop-blur-sm z-30">
-						<ComposerPrimitive.Root className="flex w-full flex-col gap-2 rounded-2xl bg-white/80 dark:bg-zinc-900/60 p-2 shadow-lg dark:shadow-xl border border-zinc-200 dark:border-zinc-800 backdrop-blur-xl transition-all focus-within:border-blue-500/30 focus-within:ring-2 focus-within:ring-blue-500/8">
-							<div className="flex items-end gap-2">
-								<ComposerPrimitive.Input
-									placeholder="输入消息..."
-									rows={1}
-									className="flex-1 max-h-28 resize-none bg-transparent px-2 py-2.5 outline-none text-zinc-900 dark:text-zinc-100 placeholder-zinc-400 dark:placeholder-zinc-600 text-sm leading-relaxed"
+		<RecipeUpdateCtx value={onRecipeUpdate}>
+			<AssistantRuntimeProvider runtime={runtime}>
+				<div className="flex h-full w-full flex-col relative overflow-hidden font-sans">
+					<ThreadPrimitive.Root className="flex flex-col h-full w-full relative z-10">
+						<ThreadPrimitive.Viewport className="flex-1 overflow-y-auto px-3 py-6 scroll-smooth">
+							<ThreadPrimitive.Empty>
+								<RecipeEmptyState
+									onSend={(text) =>
+										runtime.thread.append({
+											role: "user",
+											content: [{ type: "text", text }],
+										})
+									}
 								/>
-								<div className="flex items-center gap-1 mb-0.5">
-									<ComposerPrimitive.Cancel className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-zinc-500 transition-all hover:bg-zinc-100 dark:hover:bg-zinc-800 hover:text-red-500 active:scale-95 cursor-pointer">
-										<Trash2 className="h-3.5 w-3.5" />
-									</ComposerPrimitive.Cancel>
-									<ComposerPrimitive.Send asChild>
-										<button
-											type="submit"
-											className="flex h-8 w-10 items-center justify-center rounded-full bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 shadow-md transition-all hover:scale-105 active:scale-95 disabled:opacity-40 cursor-pointer"
-										>
-											<Send className="h-3.5 w-3.5 ml-0.5" />
-										</button>
-									</ComposerPrimitive.Send>
+							</ThreadPrimitive.Empty>
+
+							<ThreadPrimitive.Messages
+								components={{ UserMessage, AssistantMessage }}
+							/>
+
+							<ThreadPrimitive.ScrollToBottom className="fixed bottom-36 right-4 flex h-8 w-8 items-center justify-center rounded-full bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-zinc-500 shadow-lg transition-all opacity-0 data-[visible]:opacity-100 z-20 cursor-pointer">
+								<ChevronDown className="h-4 w-4" />
+							</ThreadPrimitive.ScrollToBottom>
+						</ThreadPrimitive.Viewport>
+
+						<ThreadPrimitive.ViewportFooter className="pb-4 pt-3 px-3 sticky bottom-0 bg-gradient-to-t from-zinc-50 via-zinc-50/95 dark:from-zinc-950 dark:via-zinc-950/95 to-transparent backdrop-blur-sm z-30">
+							<ComposerPrimitive.Root className="flex w-full flex-col gap-2 rounded-2xl bg-white/80 dark:bg-zinc-900/60 p-2 shadow-lg dark:shadow-xl border border-zinc-200 dark:border-zinc-800 backdrop-blur-xl transition-all focus-within:border-blue-500/30 focus-within:ring-2 focus-within:ring-blue-500/8">
+								<div className="flex items-end gap-2">
+									<ComposerPrimitive.Input
+										placeholder="输入消息..."
+										rows={1}
+										className="flex-1 max-h-28 resize-none bg-transparent px-2 py-2.5 outline-none text-zinc-900 dark:text-zinc-100 placeholder-zinc-400 dark:placeholder-zinc-600 text-sm leading-relaxed"
+									/>
+									<div className="flex items-center gap-1 mb-0.5">
+										<ComposerPrimitive.Cancel className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-zinc-500 transition-all hover:bg-zinc-100 dark:hover:bg-zinc-800 hover:text-red-500 active:scale-95 cursor-pointer">
+											<Trash2 className="h-3.5 w-3.5" />
+										</ComposerPrimitive.Cancel>
+										<ComposerPrimitive.Send asChild>
+											<button
+												type="submit"
+												className="flex h-8 w-10 items-center justify-center rounded-full bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 shadow-md transition-all hover:scale-105 active:scale-95 disabled:opacity-40 cursor-pointer"
+											>
+												<Send className="h-3.5 w-3.5 ml-0.5" />
+											</button>
+										</ComposerPrimitive.Send>
+									</div>
 								</div>
-							</div>
-						</ComposerPrimitive.Root>
-					</ThreadPrimitive.ViewportFooter>
-				</ThreadPrimitive.Root>
-			</div>
-		</AssistantRuntimeProvider>
+							</ComposerPrimitive.Root>
+						</ThreadPrimitive.ViewportFooter>
+					</ThreadPrimitive.Root>
+				</div>
+			</AssistantRuntimeProvider>
+		</RecipeUpdateCtx>
 	);
 }

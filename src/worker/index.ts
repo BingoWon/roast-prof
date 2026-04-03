@@ -19,7 +19,7 @@ import {
 	touchThread,
 } from "./db";
 import { createModel, createTitleModel, SYSTEM_PROMPT } from "./model";
-import type { ChatRequestMessage } from "./openrouter";
+import type { ChatMessagePart, ChatRequestMessage } from "./openrouter";
 import {
 	deletePaper,
 	getPaperMarkdown,
@@ -33,17 +33,26 @@ import { tools } from "./tools";
 
 const app = new Hono<{ Bindings: Env }>();
 
+// ── Auth helper ─────────────────────────────────────────────────────────────
+
+async function requireUserId(c: {
+	req: { header: (name: string) => string | undefined };
+	env: Env;
+}) {
+	return getUserId(c, c.env);
+}
+
 // ── Thread CRUD ──────────────────────────────────────────────────────────────
 
 app.get("/api/threads", async (c) => {
-	const userId = getUserId(c);
+	const userId = await requireUserId(c);
 	if (!userId) return c.json({ error: "未授权" }, 401);
 	const db = createDb(c.env.DB);
 	return c.json(await getThreadsByUserId(db, userId));
 });
 
 app.patch("/api/threads/:id", async (c) => {
-	const userId = getUserId(c);
+	const userId = await requireUserId(c);
 	if (!userId) return c.json({ error: "未授权" }, 401);
 	const { title } = await c.req.json<{ title: string }>();
 	const db = createDb(c.env.DB);
@@ -52,7 +61,7 @@ app.patch("/api/threads/:id", async (c) => {
 });
 
 app.delete("/api/threads/:id", async (c) => {
-	const userId = getUserId(c);
+	const userId = await requireUserId(c);
 	if (!userId) return c.json({ error: "未授权" }, 401);
 	const db = createDb(c.env.DB);
 	await dbDeleteThread(db, c.req.param("id"), userId);
@@ -60,7 +69,7 @@ app.delete("/api/threads/:id", async (c) => {
 });
 
 app.get("/api/threads/:id/messages", async (c) => {
-	const userId = getUserId(c);
+	const userId = await requireUserId(c);
 	if (!userId) return c.json({ error: "未授权" }, 401);
 	const db = createDb(c.env.DB);
 	const thread = await getThread(db, c.req.param("id"));
@@ -72,7 +81,7 @@ app.get("/api/threads/:id/messages", async (c) => {
 // ── RAG: Document Ingest ─────────────────────────────────────────────────────
 
 app.post("/api/documents", async (c) => {
-	const userId = getUserId(c);
+	const userId = await requireUserId(c);
 	if (!userId) return c.json({ error: "未授权" }, 401);
 	const { markdown, source } = await c.req.json<{
 		markdown: string;
@@ -93,14 +102,14 @@ app.post("/api/documents", async (c) => {
 // ── Papers CRUD ──────────────────────────────────────────────────────────────
 
 app.get("/api/papers", async (c) => {
-	const userId = getUserId(c);
+	const userId = await requireUserId(c);
 	if (!userId) return c.json({ error: "未授权" }, 401);
 	const db = createDb(c.env.DB);
 	return c.json(await listPapers(db, userId));
 });
 
 app.post("/api/papers", async (c) => {
-	const userId = getUserId(c);
+	const userId = await requireUserId(c);
 	if (!userId) return c.json({ error: "未授权" }, 401);
 
 	const formData = await c.req.formData();
@@ -127,7 +136,7 @@ app.post("/api/papers", async (c) => {
 });
 
 app.delete("/api/papers/:id", async (c) => {
-	const userId = getUserId(c);
+	const userId = await requireUserId(c);
 	if (!userId) return c.json({ error: "未授权" }, 401);
 	const db = createDb(c.env.DB);
 	await deletePaper(c.req.param("id"), { db, r2: c.env.R2, userId });
@@ -135,7 +144,7 @@ app.delete("/api/papers/:id", async (c) => {
 });
 
 app.get("/api/papers/:id/download", async (c) => {
-	const userId = getUserId(c);
+	const userId = await requireUserId(c);
 	if (!userId) return c.json({ error: "未授权" }, 401);
 
 	const db = createDb(c.env.DB);
@@ -151,16 +160,17 @@ app.get("/api/papers/:id/download", async (c) => {
 	const obj = await c.env.R2.get(paper.r2Key);
 	if (!obj) return c.json({ error: "文件不存在" }, 404);
 
+	const encoded = encodeURIComponent(paper.title);
 	return new Response(obj.body, {
 		headers: {
 			"Content-Type": "application/pdf",
-			"Content-Disposition": `attachment; filename="${encodeURIComponent(paper.title)}.pdf"`,
+			"Content-Disposition": `attachment; filename="${encoded}.pdf"; filename*=UTF-8''${encoded}.pdf`,
 		},
 	});
 });
 
 app.get("/api/papers/:id/markdown", async (c) => {
-	const userId = getUserId(c);
+	const userId = await requireUserId(c);
 	if (!userId) return c.json({ error: "未授权" }, 401);
 	const db = createDb(c.env.DB);
 	const md = await getPaperMarkdown(c.req.param("id"), {
@@ -191,6 +201,64 @@ function extractLastUserText(messages: ChatRequestMessage[]): string {
 	);
 }
 
+/** Map wire-format messages to AI SDK CoreMessage format, preserving multimodal parts. */
+function toAIMessages(msgs: ChatRequestMessage[]) {
+	return msgs.map((m) => {
+		const role = m.role as "user" | "assistant" | "system";
+		const parts = m.parts ?? [];
+
+		// Non-user roles: text-only
+		if (role !== "user") {
+			const text =
+				parts
+					.filter(
+						(p): p is Extract<ChatMessagePart, { type: "text" }> =>
+							p.type === "text",
+					)
+					.map((p) => p.text)
+					.join("") ||
+				m.content ||
+				"";
+			return { role, content: text };
+		}
+
+		// User messages: preserve multimodal content
+		const hasMedia = parts.some(
+			(p) => p.type === "image" || p.type === "image_url",
+		);
+		if (!hasMedia) {
+			const text =
+				parts
+					.filter(
+						(p): p is Extract<ChatMessagePart, { type: "text" }> =>
+							p.type === "text",
+					)
+					.map((p) => p.text)
+					.join("") ||
+				m.content ||
+				"";
+			return { role, content: text };
+		}
+
+		const content: Array<
+			{ type: "text"; text: string } | { type: "image"; image: string }
+		> = [];
+		for (const p of parts) {
+			if (p.type === "text" && p.text) {
+				content.push({ type: "text", text: p.text });
+			} else if (p.type === "image") {
+				const url = p.image ?? p.url;
+				if (url) content.push({ type: "image", image: url });
+			} else if (p.type === "image_url") {
+				const url = p.image_url?.url ?? p.url;
+				if (url) content.push({ type: "image", image: url });
+			}
+		}
+
+		return { role, content };
+	});
+}
+
 // ── Chat (AI SDK streamText + Assistant-UI) ──────────────────────────────────
 
 app.post("/api/chat", async (c) => {
@@ -199,7 +267,7 @@ app.post("/api/chat", async (c) => {
 			messages: ChatRequestMessage[];
 		}>();
 		const threadId = c.req.header("x-thread-id") || undefined;
-		const userId = getUserId(c);
+		const userId = await requireUserId(c);
 
 		if (!c.env.API_KEY) return c.json({ error: "缺少 API_KEY 配置" }, 500);
 		if (!c.env.MODEL) return c.json({ error: "缺少 MODEL 配置" }, 500);
@@ -223,7 +291,7 @@ app.post("/api/chat", async (c) => {
 						createdAt: Math.floor(Date.now() / 1000),
 					},
 				]);
-				await touchThread(db, threadId);
+				await touchThread(db, threadId, userId);
 			} catch (e) {
 				console.error("[Worker] persist user msg:", e);
 			}
@@ -269,16 +337,7 @@ app.post("/api/chat", async (c) => {
 				const chatResult = streamText({
 					model: wrappedModel,
 					system: systemPrompt,
-					messages: messages.map((m) => ({
-						role: m.role as "user" | "assistant" | "system",
-						content:
-							m.parts
-								?.filter((p) => p.type === "text")
-								.map((p) => p.text ?? "")
-								.join("") ??
-							m.content ??
-							"",
-					})),
+					messages: toAIMessages(messages),
 					tools,
 					stopWhen: stepCountIs(5),
 				});
@@ -336,7 +395,7 @@ app.post("/api/chat", async (c) => {
 									createdAt: now,
 								})),
 							);
-							await touchThread(db, threadId);
+							await touchThread(db, threadId, userId);
 						}
 					}
 				} catch (e) {
