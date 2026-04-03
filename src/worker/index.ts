@@ -21,16 +21,13 @@ import {
 import { createModel, createTitleModel, SYSTEM_PROMPT } from "./model";
 import type { ChatMessagePart, ChatRequestMessage } from "./openrouter";
 import {
-	checkOcrJob,
 	checkPaperByHash,
-	finalizePaper,
 	getPaperMarkdown,
-	isUserLinked,
+	ingestPdf,
 	listUserPapers,
 	renameUserPaper,
 	retrieveContext,
 	unlinkUserPaper,
-	uploadNewPdf,
 } from "./rag";
 import { papers, userPapers } from "./schema";
 import { tools } from "./tools";
@@ -126,15 +123,42 @@ app.post("/api/papers", async (c) => {
 
 	const db = createDb(c.env.DB);
 	const buffer = await file.arrayBuffer();
+	const encoder = new TextEncoder();
 
-	const result = await uploadNewPdf(buffer, {
-		userId,
-		db,
-		r2: c.env.R2,
-		ocrToken: c.env.PADDLE_OCR_TOKEN,
+	const stream = new ReadableStream({
+		async start(controller) {
+			const send = (event: string, data: Record<string, unknown>) => {
+				controller.enqueue(
+					encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`),
+				);
+			};
+
+			try {
+				await ingestPdf(buffer, {
+					userId,
+					db,
+					r2: c.env.R2,
+					vectorize: c.env.VECTORIZE,
+					env: c.env,
+					onStatus: (status, data) => send("status", { status, ...data }),
+				});
+			} catch (e) {
+				const msg = e instanceof Error ? e.message : "处理失败";
+				console.error("[Worker] ingest paper:", msg);
+				send("status", { status: "failed", error: msg });
+			} finally {
+				controller.close();
+			}
+		},
 	});
 
-	return c.json(result, 201);
+	return new Response(stream, {
+		headers: {
+			"Content-Type": "text/event-stream",
+			"Cache-Control": "no-cache",
+			Connection: "keep-alive",
+		},
+	});
 });
 
 app.patch("/api/papers/:id", async (c) => {
@@ -152,86 +176,6 @@ app.delete("/api/papers/:id", async (c) => {
 	const db = createDb(c.env.DB);
 	await unlinkUserPaper(db, userId, c.req.param("id"));
 	return c.json({ ok: true });
-});
-
-app.get("/api/papers/:id/status", async (c) => {
-	const userId = await requireUserId(c);
-	if (!userId) return c.json({ error: "未授权" }, 401);
-	if (!c.env.PADDLE_OCR_TOKEN)
-		return c.json({ error: "缺少 PADDLE_OCR_TOKEN 配置" }, 500);
-
-	const db = createDb(c.env.DB);
-	const paperId = c.req.param("id");
-
-	if (!(await isUserLinked(db, userId, paperId)))
-		return c.json({ error: "未找到" }, 404);
-
-	const [paper] = await db
-		.select()
-		.from(papers)
-		.where(eq(papers.id, paperId))
-		.limit(1);
-	if (!paper) return c.json({ error: "未找到" }, 404);
-
-	// Non-OCR statuses: return immediately
-	const isOcrPhase =
-		paper.status === "ocr_pending" || paper.status === "ocr_running";
-	if (!isOcrPhase || !paper.jobId) {
-		return c.json({ status: paper.status, chunks: paper.chunks });
-	}
-
-	// Check PaddleOCR job
-	const job = await checkOcrJob(paper.jobId, c.env.PADDLE_OCR_TOKEN);
-
-	if (job.state === "failed") {
-		await db
-			.update(papers)
-			.set({ status: "failed" })
-			.where(eq(papers.id, paperId));
-		return c.json({ status: "failed", error: job.error });
-	}
-
-	if (job.state !== "done") {
-		// Update to ocr_running if we have progress
-		if (job.progress && paper.status === "ocr_pending") {
-			await db
-				.update(papers)
-				.set({ status: "ocr_running" })
-				.where(eq(papers.id, paperId));
-		}
-		return c.json({
-			status:
-				paper.status === "ocr_pending" && job.progress
-					? "ocr_running"
-					: paper.status,
-			progress: job.progress,
-		});
-	}
-
-	if (!job.jsonUrl) {
-		return c.json({ status: "failed", error: "OCR 结果 URL 缺失" });
-	}
-
-	// OCR done — finalize (chunking → embedding → ready)
-	try {
-		const result = await finalizePaper(paperId, job.jsonUrl, {
-			db,
-			r2: c.env.R2,
-			vectorize: c.env.VECTORIZE,
-			env: c.env,
-		});
-		return c.json({ status: "ready", chunks: result.chunks });
-	} catch (e) {
-		console.error("[Worker] finalize paper:", e);
-		await db
-			.update(papers)
-			.set({ status: "failed" })
-			.where(eq(papers.id, paperId));
-		return c.json({
-			status: "failed",
-			error: e instanceof Error ? e.message : "处理失败",
-		});
-	}
 });
 
 app.get("/api/papers/:id/download", async (c) => {

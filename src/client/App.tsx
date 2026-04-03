@@ -1,6 +1,6 @@
 import type { UIMessage as Message } from "@ai-sdk/react";
 import { Show, SignInButton, SignUpButton, UserButton } from "@clerk/react";
-import { BookOpen, ChefHat, Loader2 } from "lucide-react";
+import { ChefHat, FileText, Loader2 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Chat } from "./Chat";
 import { CollapsedHandle } from "./components/CollapsedHandle";
@@ -209,7 +209,7 @@ function App() {
 											: "text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800"
 									}`}
 								>
-									<BookOpen className="w-3.5 h-3.5 shrink-0" />
+									<FileText className="w-3.5 h-3.5 shrink-0" />
 									<span className="truncate">{selectedPaper.title}</span>
 								</button>
 							)}
@@ -228,10 +228,7 @@ function App() {
 							</div>
 						)}
 						{centerTab === "paper" && selectedPaper && (
-							<PaperViewer
-								paperId={selectedPaper.id}
-								title={selectedPaper.title}
-							/>
+							<PaperViewer paperId={selectedPaper.id} />
 						)}
 					</div>
 

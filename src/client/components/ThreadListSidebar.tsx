@@ -118,18 +118,12 @@ interface Paper {
 	createdAt: number;
 }
 
-const PROCESSING_STATUSES = [
-	"ocr_pending",
-	"ocr_running",
-	"chunking",
-	"embedding",
-];
+const PLACEHOLDER_TITLE = "等待解析后自动生成标题…";
 
 const PapersPanel: FC<{
 	onPaperSelect?: (paperId: string, title: string) => void;
 }> = ({ onPaperSelect }) => {
 	const [papers, setPapers] = useState<Paper[]>([]);
-	const [uploading, setUploading] = useState(false);
 	const [dragOver, setDragOver] = useState(false);
 	const fileRef = useRef<HTMLInputElement>(null);
 
@@ -146,76 +140,27 @@ const PapersPanel: FC<{
 		fetchPapers();
 	}, [fetchPapers]);
 
-	// Poll non-ready papers; trigger LLM title generation when ready
-	useEffect(() => {
-		const pending = papers.filter((p) =>
-			PROCESSING_STATUSES.includes(p.status),
-		);
-		if (pending.length === 0) return;
-
-		const interval = setInterval(async () => {
-			let changed = false;
-			for (const p of pending) {
-				try {
-					const res = await fetch(`/api/papers/${p.id}/status`);
-					if (!res.ok) continue;
-					const data = (await res.json()) as { status: string };
-
-					if (data.status !== p.status) {
-						// Update status locally for immediate UI feedback
-						setPapers((prev) =>
-							prev.map((pp) =>
-								pp.id === p.id ? { ...pp, status: data.status } : pp,
-							),
-						);
-					}
-
-					if (data.status === "ready") {
-						changed = true;
-						// Generate LLM title (best-effort)
-						try {
-							const titleRes = await fetch(
-								`/api/papers/${p.id}/generate-title`,
-								{ method: "POST" },
-							);
-							if (titleRes.ok) {
-								const { title } = (await titleRes.json()) as {
-									title: string;
-								};
-								if (title) {
-									setPapers((prev) =>
-										prev.map((pp) => (pp.id === p.id ? { ...pp, title } : pp)),
-									);
-								}
-							}
-						} catch {
-							/* best-effort */
-						}
-					} else if (data.status === "failed") {
-						changed = true;
-					}
-				} catch {
-					/* ignore */
-				}
-			}
-			if (changed) fetchPapers();
-		}, 2000);
-
-		return () => clearInterval(interval);
-	}, [papers, fetchPapers]);
+	const updatePaperStatus = useCallback(
+		(paperId: string, status: string, extra?: Partial<Paper>) => {
+			setPapers((prev) =>
+				prev.map((p) => (p.id === paperId ? { ...p, status, ...extra } : p)),
+			);
+		},
+		[],
+	);
 
 	const handleUpload = async (file: File) => {
 		if (!file.name.endsWith(".pdf")) return;
-		setUploading(true);
+
+		const buffer = await file.arrayBuffer();
+
+		// Frontend hash precheck
+		const digest = await crypto.subtle.digest("SHA-256", buffer);
+		const hash = [...new Uint8Array(digest)]
+			.map((b) => b.toString(16).padStart(2, "0"))
+			.join("");
+
 		try {
-			const buffer = await file.arrayBuffer();
-
-			// Frontend hash precheck
-			const digest = await crypto.subtle.digest("SHA-256", buffer);
-			const hash = [...new Uint8Array(digest)]
-				.map((b) => b.toString(16).padStart(2, "0"))
-				.join("");
-
 			const checkRes = await fetch(
 				`/api/papers/check?hash=${encodeURIComponent(hash)}`,
 			);
@@ -225,19 +170,108 @@ const PapersPanel: FC<{
 					paperId?: string;
 				};
 				if (check.exists) {
-					// Already exists — auto-linked by check endpoint
 					await fetchPapers();
 					return;
 				}
 			}
+		} catch {
+			/* proceed with upload */
+		}
 
-			// Not found — upload file
-			const form = new FormData();
-			form.append("file", file);
+		// Add placeholder item immediately
+		const tempId = crypto.randomUUID() as string;
+		setPapers((prev) => [
+			{
+				id: tempId,
+				title: PLACEHOLDER_TITLE,
+				chunks: 0,
+				status: "uploading",
+				createdAt: Math.floor(Date.now() / 1000),
+			},
+			...prev,
+		]);
+
+		// Upload with SSE progress
+		const form = new FormData();
+		form.append("file", file);
+
+		try {
 			const res = await fetch("/api/papers", { method: "POST", body: form });
-			if (res.ok) await fetchPapers();
-		} finally {
-			setUploading(false);
+			if (!res.ok || !res.body) {
+				updatePaperStatus(tempId, "failed");
+				return;
+			}
+
+			const reader = res.body.getReader();
+			const decoder = new TextDecoder();
+			let buf = "";
+			let realPaperId = tempId;
+
+			while (true) {
+				const { done, value } = await reader.read();
+				if (done) break;
+				buf += decoder.decode(value, { stream: true });
+
+				const lines = buf.split("\n");
+				buf = lines.pop() ?? "";
+
+				for (const line of lines) {
+					if (!line.startsWith("data: ")) continue;
+					try {
+						const data = JSON.parse(line.slice(6)) as {
+							status: string;
+							paperId?: string;
+							chunks?: number;
+							duplicate?: boolean;
+						};
+
+						// Map real paperId on first event
+						if (data.paperId && realPaperId === tempId) {
+							realPaperId = data.paperId;
+							setPapers((prev) =>
+								prev.map((p) =>
+									p.id === tempId ? { ...p, id: realPaperId } : p,
+								),
+							);
+						}
+
+						if (data.duplicate) {
+							// Dedup hit — remove placeholder, refetch
+							setPapers((prev) => prev.filter((p) => p.id !== realPaperId));
+							await fetchPapers();
+							return;
+						}
+
+						updatePaperStatus(realPaperId, data.status, {
+							chunks: data.chunks ?? 0,
+						});
+
+						// Generate title when ready
+						if (data.status === "ready") {
+							try {
+								const titleRes = await fetch(
+									`/api/papers/${realPaperId}/generate-title`,
+									{ method: "POST" },
+								);
+								if (titleRes.ok) {
+									const { title } = (await titleRes.json()) as {
+										title: string;
+									};
+									if (title) {
+										updatePaperStatus(realPaperId, "ready", { title });
+									}
+								}
+							} catch {
+								/* best-effort */
+							}
+						}
+					} catch {
+						/* skip malformed SSE */
+					}
+				}
+			}
+		} catch {
+			updatePaperStatus(tempId, "failed");
 		}
 	};
 
@@ -290,13 +324,9 @@ const PapersPanel: FC<{
 						: "border-zinc-300 dark:border-zinc-700"
 				}`}
 			>
-				{uploading ? (
-					<Loader2 className="w-5 h-5 text-zinc-400 animate-spin" />
-				) : (
-					<Upload className="w-5 h-5 text-zinc-400" />
-				)}
+				<Upload className="w-5 h-5 text-zinc-400" />
 				<span className="text-xs text-zinc-500 dark:text-zinc-400">
-					{uploading ? "上传中..." : "拖拽或点击上传 PDF"}
+					拖拽或点击上传 PDF
 				</span>
 			</div>
 
@@ -314,7 +344,7 @@ const PapersPanel: FC<{
 
 			{/* 论文列表 */}
 			<div className="flex-1 overflow-y-auto px-2 pb-4 flex flex-col gap-1 pointer-events-auto">
-				{papers.length === 0 && !uploading && (
+				{papers.length === 0 && (
 					<p className="text-center text-xs text-zinc-400 dark:text-zinc-600 mt-4 pointer-events-none">
 						暂无论文
 					</p>
@@ -337,28 +367,29 @@ const PapersPanel: FC<{
 
 // ── Progress Dots ────────────────────────────────────────────────────────────
 
+const STEP_LABELS = ["上传", "解析", "分块", "嵌入"];
+
 function stepIndex(status: string): number {
-	if (status === "ocr_pending" || status === "ocr_running") return 0;
-	if (status === "chunking") return 1;
-	if (status === "embedding") return 2;
+	if (status === "uploading") return 0;
+	if (status === "parsing") return 1;
+	if (status === "chunking") return 2;
+	if (status === "embedding") return 3;
 	return -1;
 }
 
 const ProgressDots: FC<{ status: string }> = ({ status }) => {
 	const active = stepIndex(status);
-	// Deduplicated labels: 解析 → 分块 → 嵌入
-	const labels = ["解析", "分块", "嵌入"];
 
 	return (
-		<div className="flex items-center gap-0.5 mt-0.5">
-			{labels.map((label, i) => {
+		<div className="flex items-center mt-1">
+			{STEP_LABELS.map((label, i) => {
 				const done = i < active;
 				const current = i === active;
 				return (
-					<div key={label} className="flex items-center gap-0.5">
+					<div key={label} className="flex items-center">
 						{i > 0 && (
 							<div
-								className={`w-3 h-px ${done || current ? "bg-blue-400" : "bg-zinc-300 dark:bg-zinc-700"}`}
+								className={`w-4 h-px mx-0.5 ${done || current ? "bg-blue-400" : "bg-zinc-300 dark:bg-zinc-700"}`}
 							/>
 						)}
 						<div className="flex flex-col items-center">
@@ -471,7 +502,7 @@ const PaperListItem: FC<{
 				onClick();
 			}}
 			onDoubleClick={() => p.status === "ready" && setEditing(true)}
-			className={`group flex items-center justify-between rounded-lg px-3 py-2.5 text-sm transition ${
+			className={`group w-full rounded-lg px-3 py-2.5 text-sm transition ${
 				p.status === "ready"
 					? "hover:bg-zinc-100 dark:hover:bg-zinc-900 cursor-pointer"
 					: p.status === "failed"
@@ -479,7 +510,7 @@ const PaperListItem: FC<{
 						: ""
 			}`}
 		>
-			<div className="flex items-center gap-2 overflow-hidden min-w-0">
+			<div className="flex items-center gap-2 w-full">
 				{p.status === "ready" ? (
 					<FileText className="w-4 h-4 text-zinc-400 shrink-0" />
 				) : p.status === "failed" ? (
@@ -488,8 +519,40 @@ const PaperListItem: FC<{
 					<Loader2 className="w-4 h-4 text-blue-400 animate-spin shrink-0" />
 				)}
 				<div className="min-w-0 flex-1">
-					<div className="truncate text-zinc-700 dark:text-zinc-300 font-medium">
-						{p.title}
+					<div className="flex items-center justify-between gap-2">
+						<span className="truncate text-zinc-700 dark:text-zinc-300 font-medium">
+							{p.title}
+						</span>
+						<div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition shrink-0">
+							{p.status === "ready" && (
+								// biome-ignore lint/a11y/useSemanticElements: nested interactive
+								<span
+									role="button"
+									tabIndex={-1}
+									onClick={(e) => {
+										e.stopPropagation();
+										setEditing(true);
+									}}
+									onKeyDown={() => {}}
+									className="p-1 hover:text-blue-500 transition cursor-pointer"
+								>
+									<Pencil className="w-3 h-3" />
+								</span>
+							)}
+							{/* biome-ignore lint/a11y/useSemanticElements: nested interactive */}
+							<span
+								role="button"
+								tabIndex={-1}
+								onClick={(e) => {
+									e.stopPropagation();
+									onUnlink(e);
+								}}
+								onKeyDown={() => {}}
+								className="p-1 hover:text-red-500 transition cursor-pointer"
+							>
+								<X className="w-3.5 h-3.5" />
+							</span>
+						</div>
 					</div>
 					{p.status === "ready" ? (
 						<div className="flex items-center justify-between text-[10px] text-zinc-400 dark:text-zinc-600">
@@ -502,36 +565,6 @@ const PaperListItem: FC<{
 						<ProgressDots status={p.status} />
 					)}
 				</div>
-			</div>
-			<div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition shrink-0">
-				{p.status === "ready" && (
-					// biome-ignore lint/a11y/useSemanticElements: nested interactive
-					<span
-						role="button"
-						tabIndex={-1}
-						onClick={(e) => {
-							e.stopPropagation();
-							setEditing(true);
-						}}
-						onKeyDown={() => {}}
-						className="p-1 hover:text-blue-500 transition cursor-pointer"
-					>
-						<Pencil className="w-3 h-3" />
-					</span>
-				)}
-				{/* biome-ignore lint/a11y/useSemanticElements: nested interactive */}
-				<span
-					role="button"
-					tabIndex={-1}
-					onClick={(e) => {
-						e.stopPropagation();
-						onUnlink(e);
-					}}
-					onKeyDown={() => {}}
-					className="p-1 hover:text-red-500 transition cursor-pointer"
-				>
-					<X className="w-3.5 h-3.5" />
-				</span>
 			</div>
 		</div>
 	);

@@ -21,8 +21,7 @@ CREATE TABLE `papers` (
 	`r2_key` text NOT NULL,
 	`markdown_r2_key` text,
 	`chunks` integer DEFAULT 0 NOT NULL,
-	`status` text DEFAULT 'processing' NOT NULL,
-	`job_id` text,
+	`status` text DEFAULT 'uploading' NOT NULL,
 	`created_at` integer DEFAULT (strftime('%s', 'now')) NOT NULL
 );
 
