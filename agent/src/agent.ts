@@ -2,6 +2,7 @@
  * Roast-Prof LangGraph agent — recipe assistant with shared state + HITL RAG.
  */
 
+import "dotenv/config";
 import { createClient } from "@supabase/supabase-js";
 import { ChatOpenAI } from "@langchain/openai";
 import { AIMessage, SystemMessage, ToolMessage } from "@langchain/core/messages";
@@ -11,7 +12,10 @@ import { Annotation, Command, END, MessagesAnnotation, START, StateGraph, interr
 
 // ── Env helpers (langgraph-cli loads .env automatically) ─────────────────────
 
-const env = (key: string, fallback?: string) => process.env[key] || fallback || "";
+const env = (key: string, fallback = "") => {
+	const v = process.env[key];
+	return v && v.length > 0 ? v : fallback;
+};
 
 // ── State ────────────────────────────────────────────────────────────────────
 
