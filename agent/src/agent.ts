@@ -184,7 +184,8 @@ async function chatNode(state: State, config?: RunnableConfig): Promise<Command>
 	// Use env vars for model config — ChatOpenAI reads OPENAI_API_KEY and OPENAI_BASE_URL automatically
 	const model = new ChatOpenAI({
 		model: env("MODEL", "gpt-4o-mini"),
-		...(env("OPENAI_BASE_URL") ? { configuration: { baseURL: env("OPENAI_BASE_URL") } } : {}),
+		apiKey: env("OPENAI_API_KEY"),
+		configuration: { baseURL: env("OPENAI_BASE_URL", "https://api.openai.com/v1") },
 	});
 
 	if (!config) config = { recursionLimit: 25 };

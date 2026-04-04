@@ -9,8 +9,8 @@ import {
 } from "@clerk/nextjs";
 import { CopilotKit, useLangGraphInterrupt } from "@copilotkit/react-core";
 import {
+	CopilotChat,
 	CopilotChatConfigurationProvider,
-	CopilotSidebar,
 	UseAgentUpdate,
 	useAgent,
 	useConfigureSuggestions,
@@ -419,11 +419,9 @@ function MainApp() {
 							</div>
 						) : (
 							<ErrorBoundary>
-								<CopilotSidebar
+								<CopilotChat
 									agentId="roast_prof"
-									defaultOpen={true}
-									labels={{ modalHeaderTitle: "AI 食谱助手" }}
-									className="h-full"
+									className="copilot-chat-custom h-full"
 								/>
 							</ErrorBoundary>
 						)}
