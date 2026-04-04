@@ -176,3 +176,6 @@ scripts/
 references/
 # clerk configuration (can include secrets)
 /.clerk/
+
+# LangGraph API
+.langgraph_api

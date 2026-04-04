@@ -12,9 +12,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
 	return (
 		<html lang="zh" suppressHydrationWarning>
 			<body>
-				<ClerkProvider afterSignOutUrl="/">
-					{children}
-				</ClerkProvider>
+				<ClerkProvider afterSignOutUrl="/">{children}</ClerkProvider>
 			</body>
 		</html>
 	);

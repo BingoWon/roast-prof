@@ -53,31 +53,38 @@ const UPDATE_RECIPE_TOOL = {
 	function: {
 		name: "update_recipe",
 		description:
-			"更新食谱卡片。当你创建或修改食谱时必须调用此工具。将完整食谱数据传入，前端会实时流式渲染。",
+			"更新食谱卡片。当你创建或修改食谱时必须调用此工具。将完整食谱数据放在 recipe 参数中传入，前端会实时流式渲染。ALWAYS provide the entire recipe, not just the changes.",
 		parameters: {
 			type: "object",
 			properties: {
-				title: { type: "string" },
-				skill_level: { type: "string", enum: ["初级", "中级", "高级"] },
-				cooking_time: {
-					type: "string",
-					enum: ["5分钟", "15分钟", "30分钟", "45分钟", "60+分钟"],
-				},
-				ingredients: {
-					type: "array",
-					items: {
-						type: "object",
-						properties: {
-							icon: { type: "string", description: "食材 emoji，如 🥕" },
-							name: { type: "string" },
-							amount: { type: "string" },
+				recipe: {
+					type: "object",
+					description: "完整的食谱数据",
+					properties: {
+						title: { type: "string" },
+						skill_level: { type: "string", enum: ["初级", "中级", "高级"] },
+						cooking_time: {
+							type: "string",
+							enum: ["5分钟", "15分钟", "30分钟", "45分钟", "60+分钟"],
 						},
-						required: ["icon", "name", "amount"],
+						ingredients: {
+							type: "array",
+							items: {
+								type: "object",
+								properties: {
+									icon: { type: "string", description: "食材 emoji，如 🥕" },
+									name: { type: "string" },
+									amount: { type: "string" },
+								},
+								required: ["icon", "name", "amount"],
+							},
+						},
+						instructions: { type: "array", items: { type: "string" } },
+						special_preferences: { type: "array", items: { type: "string" } },
 					},
 				},
-				instructions: { type: "array", items: { type: "string" } },
-				special_preferences: { type: "array", items: { type: "string" } },
 			},
+			required: ["recipe"],
 		},
 	},
 };
@@ -199,13 +206,54 @@ const handlers: Record<string, Handler> = {
 				{ title: `关于「${query}」的搜索结果 2`, url: "https://example.com/2", snippet: "另一条有用信息。" },
 			],
 		}),
-	update_recipe: async (input) => JSON.stringify(input),
+	update_recipe: async (input) => JSON.stringify(input.recipe ?? input),
 	rag_search: async ({ query, topK = 5 }) => {
-		// TODO: Wire to Cloudflare Vectorize HTTP API + D1 for document retrieval
-		return JSON.stringify({
-			context: `检索结果：关于「${query}」的 ${topK} 条相关内容（待接入 Vectorize）`,
-			papers: 0,
-		});
+		// Call Supabase pgvector search via direct API
+		const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
+		const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+		const embeddingUrl = process.env.EMBEDDING_BASE_URL || process.env.OPENAI_BASE_URL;
+		const embeddingKey = process.env.EMBEDDING_API_KEY || process.env.OPENAI_API_KEY;
+		const embeddingModel = process.env.EMBEDDING_MODEL || "text-embedding-3-small";
+
+		if (!supabaseUrl || !supabaseKey || !embeddingUrl || !embeddingKey) {
+			return JSON.stringify({ context: "", message: "RAG 服务未配置" });
+		}
+
+		try {
+			// Get query embedding
+			const embedRes = await fetch(`${embeddingUrl}/embeddings`, {
+				method: "POST",
+				headers: { "Content-Type": "application/json", Authorization: `Bearer ${embeddingKey}` },
+				body: JSON.stringify({ input: [query], model: embeddingModel, dimensions: 1536 }),
+			});
+			// biome-ignore lint/suspicious/noExplicitAny: embedding response
+			const embedData = (await embedRes.json()) as any;
+			const queryEmbedding = embedData.data?.[0]?.embedding;
+			if (!queryEmbedding) return JSON.stringify({ context: "", message: "嵌入失败" });
+
+			// Search via Supabase RPC
+			const searchRes = await fetch(`${supabaseUrl}/rest/v1/rpc/match_documents`, {
+				method: "POST",
+				headers: {
+					"Content-Type": "application/json",
+					apikey: supabaseKey,
+					Authorization: `Bearer ${supabaseKey}`,
+				},
+				body: JSON.stringify({
+					query_embedding: JSON.stringify(queryEmbedding),
+					match_count: topK,
+					filter_paper_ids: [], // TODO: pass user's paper IDs from frontend state
+				}),
+			});
+			// biome-ignore lint/suspicious/noExplicitAny: RPC response
+			const results = (await searchRes.json()) as any[];
+			if (!results?.length) return JSON.stringify({ context: "未找到相关内容", papers: 0 });
+
+			const context = results.map((r: { content: string }) => r.content).join("\n\n---\n\n");
+			return JSON.stringify({ context, papers: results.length });
+		} catch (e) {
+			return JSON.stringify({ context: "", message: `检索错误: ${(e as Error).message}` });
+		}
 	},
 };
 
@@ -310,10 +358,11 @@ async function chatNode(
 		const tc = response.tool_calls[0];
 
 		if (tc.name === "update_recipe") {
-			// Update recipe state
+			// Update recipe state — args.recipe contains the nested recipe data
+			const recipeData = tc.args.recipe ?? tc.args;
 			const recipe = state.recipe
-				? { ...state.recipe, ...tc.args }
-				: tc.args;
+				? { ...state.recipe, ...recipeData }
+				: recipeData;
 
 			state.recipe = recipe;
 			await dispatchCustomEvent(

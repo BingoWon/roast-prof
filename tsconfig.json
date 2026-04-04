@@ -17,5 +17,15 @@
 		"paths": { "@/*": ["./src/*"] }
 	},
 	"include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
-	"exclude": ["node_modules", "agent", "demo-copilotkit", "dist", "references", "docs"]
+	"exclude": [
+		"node_modules",
+		"agent",
+		"demo-copilotkit",
+		"dist",
+		"references",
+		"docs",
+		"src/worker",
+		"src/client",
+		"scripts"
+	]
 }

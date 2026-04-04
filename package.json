@@ -20,6 +20,8 @@
 		"@copilotkit/shared": "latest",
 		"@langchain/core": "^1.1.38",
 		"@langchain/textsplitters": "^1.0.1",
+		"@supabase/ssr": "^0.10.0",
+		"@supabase/supabase-js": "^2.101.1",
 		"@tabler/icons-react": "^3.41.1",
 		"@tailwindcss/typography": "^0.5.19",
 		"drizzle-orm": "^0.45.2",

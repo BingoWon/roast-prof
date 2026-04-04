@@ -9,8 +9,7 @@ async function createRuntime() {
 	return new CopilotRuntime({
 		agents: {
 			roast_prof: new LangGraphAgent({
-				deploymentUrl:
-					process.env.LANGGRAPH_URL || "http://127.0.0.1:8123",
+				deploymentUrl: process.env.LANGGRAPH_URL || "http://127.0.0.1:8123",
 				graphId: "roast_prof",
 			}),
 		},
