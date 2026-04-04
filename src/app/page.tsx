@@ -58,11 +58,21 @@ export default function Page() {
 function AppWithThreads() {
 	const threadCtx = useThreads();
 
+	// Wait until activeThreadId is resolved before mounting CopilotKit
+	// to avoid undefined→UUID threadId switch which resets streaming state
+	if (threadCtx.loading || !threadCtx.activeThreadId) {
+		return (
+			<main className="h-screen w-screen bg-[#dedee9] dark:bg-[#1a1a2e] flex items-center justify-center">
+				<Loader2 className="w-8 h-8 text-zinc-400 animate-spin" />
+			</main>
+		);
+	}
+
 	return (
 		<CopilotKit
 			runtimeUrl="/api/copilotkit"
 			agent="roast_prof"
-			threadId={threadCtx.activeThreadId ?? undefined}
+			threadId={threadCtx.activeThreadId}
 		>
 			<CopilotChatConfigurationProvider agentId="roast_prof">
 				<MainApp threadCtx={threadCtx} />
