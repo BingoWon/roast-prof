@@ -281,7 +281,7 @@ export function createAgent(opts: {
 		model: opts.env.MODEL,
 	});
 
-	const systemPrompt = opts.env.SYSTEM_PROMPT || SYSTEM_PROMPT;
+	const systemPrompt = SYSTEM_PROMPT;
 
 	// ── Chat node: streaming LLM with tools ──────────────────────────────────
 	async function chatNode(
@@ -360,7 +360,7 @@ export async function generateTitle(text: string, env: Env): Promise<string> {
 	const titleModel = new WorkersChatModel({
 		baseURL: env.BASE_URL,
 		apiKey: env.API_KEY,
-		model: env.TITLE_MODEL || env.MODEL,
+		model: env.MODEL,
 	});
 	const response = await titleModel.invoke([
 		new SystemMessage(
