@@ -4,6 +4,8 @@ import {
 	useAui,
 	useAuiState,
 } from "@assistant-ui/react";
+import { useUser, UserButton } from "@clerk/react";
+import { ThemeToggle } from "./ThemeToggle";
 import {
 	BookOpen,
 	Brain,
@@ -267,8 +269,28 @@ export const ThreadListSidebar: FC<{
 		)}
 
 		{activeTab === "memory" && <MemoryPanel />}
+
+		{/* User section at bottom */}
+		<SidebarUserSection />
 	</div>
 );
+
+// ── User Section (sidebar bottom) ───────────────────────────────────────────
+
+const SidebarUserSection: FC = () => {
+	const { user } = useUser();
+	return (
+		<div className="flex items-center gap-3 px-3 py-3 border-t border-zinc-200/50 dark:border-zinc-700/50 shrink-0">
+			<UserButton
+				appearance={{ elements: { avatarBox: "h-7 w-7" } }}
+			/>
+			<span className="flex-1 truncate text-sm font-medium text-zinc-700 dark:text-zinc-300">
+				{user?.fullName || user?.username || user?.primaryEmailAddress?.emailAddress || ""}
+			</span>
+			<ThemeToggle />
+		</div>
+	);
+};
 
 // ── Thread Item ─────────────────────────────────────────────────────────────
 

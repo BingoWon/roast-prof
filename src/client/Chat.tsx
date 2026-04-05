@@ -533,7 +533,7 @@ export function Chat({
 			>
 				<ThreadPrimitive.Viewport
 					turnAnchor="top"
-					className="relative flex flex-1 flex-col overflow-x-hidden overflow-y-auto scroll-smooth px-4 pt-12"
+					className="relative flex flex-1 flex-col overflow-x-hidden overflow-y-auto scroll-smooth px-4 pt-4"
 				>
 					{/* Existing thread loading → spinner; new thread → welcome */}
 					<AuiIf

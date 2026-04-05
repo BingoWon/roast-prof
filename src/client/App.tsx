@@ -1,4 +1,5 @@
-import { Show, SignInButton, SignUpButton, UserButton } from "@clerk/react";
+import { Show, SignInButton, SignUpButton } from "@clerk/react";
+import { ThemeToggle } from "./components/ThemeToggle";
 import { ChefHat, Globe, Languages } from "lucide-react";
 import { type FC, useCallback, useRef, useState } from "react";
 import { Chat } from "./Chat";
@@ -11,7 +12,6 @@ import {
 	type Recipe,
 	RecipePanel,
 } from "./components/RecipePanel";
-import { ThemeToggle } from "./components/ThemeToggle";
 import {
 	type SidebarTab,
 	ThreadListSidebar,
@@ -99,18 +99,10 @@ function App() {
 				style={{ background: "rgba(255, 172, 77, 0.2)", filter: "blur(103px)" }}
 			/>
 
-			<header className="absolute top-0 right-0 p-4 z-50 flex items-center justify-end gap-2">
-				<ThemeToggle />
-				<Show when="signed-in">
-					<UserButton
-						appearance={{
-							elements: { avatarBox: "h-7 w-7" },
-						}}
-					/>
-				</Show>
-			</header>
-
 			<Show when="signed-out">
+				<div className="absolute top-4 right-4 z-50">
+					<ThemeToggle />
+				</div>
 				<div className="flex-1 flex flex-col items-center justify-center p-8 text-center h-full w-full z-10">
 					<div className="max-w-md w-full space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
 						<div className="w-20 h-20 bg-blue-500/10 dark:bg-blue-500/20 text-blue-500 dark:text-blue-400 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-sm ring-1 ring-blue-500/20">

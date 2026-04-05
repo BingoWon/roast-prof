@@ -8,11 +8,6 @@ type ThreadItem = { id: string; remoteId?: string };
  * Syncs the active thread ID and sidebar tab with the browser URL.
  *
  * URL uses remoteId (server-side UUID), never local runtime IDs.
- *
- *   /                         → new thread, tab=chat
- *   /c/{remoteId}             → specific thread, tab=chat
- *   /c/{remoteId}?tab=library → specific thread, library tab
- *   /c/{remoteId}?tab=memory  → specific thread, memory tab
  */
 export function useUrlSync(
 	sidebarTab: SidebarTab,
@@ -22,13 +17,16 @@ export function useUrlSync(
 	const threadItems = useAuiState(
 		(s) => s.threads.threadItems as unknown as ThreadItem[],
 	);
+	const threadIds = useAuiState((s) => s.threads.threadIds);
 	const mainThreadId = useAuiState((s) => s.threads.mainThreadId);
-	const initializedRef = useRef(false);
+	const restoredRef = useRef(false);
 
-	// ── Read URL on mount → restore thread + tab ────────────────────────
+	// ── Restore thread + tab from URL once threads are loaded ────────────
 	useEffect(() => {
-		if (initializedRef.current || !threadItems?.length) return;
-		initializedRef.current = true;
+		if (restoredRef.current) return;
+		// Wait until thread list has loaded from server
+		if (!threadItems?.length && !threadIds?.length) return;
+		restoredRef.current = true;
 
 		const path = window.location.pathname;
 		const params = new URLSearchParams(window.location.search);
@@ -41,16 +39,29 @@ export function useUrlSync(
 
 		// Restore thread by remoteId from URL
 		const match = path.match(/^\/c\/([a-f0-9-]+)$/i);
-		if (match) {
-			const urlRemoteId = match[1];
-			const found = threadItems.find((t) => t.remoteId === urlRemoteId);
-			if (found && found.id !== mainThreadId) {
-				aui.threads().switchToThread(found.id);
-			} else if (!found) {
+		if (!match) return;
+
+		const urlRemoteId = match[1];
+
+		// Find the thread with this remoteId
+		const found = threadItems?.find((t) => t.remoteId === urlRemoteId);
+		if (!found) {
+			// Also try matching directly against threadIds (remoteId might equal id)
+			const directMatch = threadIds?.includes(urlRemoteId);
+			if (directMatch) {
+				if (urlRemoteId !== mainThreadId) {
+					aui.threads().switchToThread(urlRemoteId);
+				}
+			} else {
 				window.history.replaceState(null, "", "/");
 			}
+			return;
 		}
-	}, [threadItems, mainThreadId, aui, setSidebarTab]);
+
+		if (found.id !== mainThreadId) {
+			aui.threads().switchToThread(found.id);
+		}
+	}, [threadItems, threadIds, mainThreadId, aui, setSidebarTab]);
 
 	// ── Derive current main thread's remoteId ───────────────────────────
 	const mainRemoteId = useAuiState((s) => {
@@ -75,7 +86,7 @@ export function useUrlSync(
 	);
 
 	useEffect(() => {
-		if (!initializedRef.current) return;
+		if (!restoredRef.current) return;
 		updateUrl(mainRemoteId, sidebarTab);
 	}, [mainRemoteId, sidebarTab, updateUrl]);
 }
