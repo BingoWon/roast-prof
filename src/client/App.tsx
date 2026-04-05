@@ -1,3 +1,4 @@
+import type { UIMessage as Message } from "@ai-sdk/react";
 import { Show, SignInButton, SignUpButton, UserButton } from "@clerk/react";
 import {
 	IconFileTypeDocx,
@@ -7,7 +8,6 @@ import {
 	IconFileTypeTxt,
 } from "@tabler/icons-react";
 import { ChefHat, FileText, Globe, Languages, Loader2 } from "lucide-react";
-// biome-ignore lint/correctness/noUnusedImports: useCallback is used below
 import { type FC, useCallback, useEffect, useRef, useState } from "react";
 import { Chat } from "./Chat";
 import { CollapsedHandle } from "./components/CollapsedHandle";
@@ -51,6 +51,8 @@ function App() {
 		loading,
 	} = useThreads();
 
+	const [initialMessages, setInitialMessages] = useState<Message[]>([]);
+	const [chatReady, setChatReady] = useState(false);
 	const [recipe, setRecipe] = useState<Recipe>(INITIAL_RECIPE);
 	const [changedKeys, setChangedKeys] = useState<string[]>([]);
 	const [isAiLoading, setIsAiLoading] = useState(false);
@@ -63,8 +65,33 @@ function App() {
 		fileExt?: string | null;
 	} | null>(null);
 	const [viewLang, setViewLang] = useState<"original" | "zh">("zh");
+	const improveRef = useRef<(() => void) | null>(null);
 	const containerRef = useRef<HTMLDivElement>(null);
 	const layout = useResizableLayout(containerRef);
+
+	useEffect(() => {
+		if (!activeThreadId) {
+			setChatReady(false);
+			return;
+		}
+		let cancelled = false;
+		setChatReady(false);
+		fetch(`/api/threads/${activeThreadId}/messages`)
+			.then((res) => (res.ok ? res.json() : []))
+			.then((msgs: unknown) => {
+				if (cancelled) return;
+				setInitialMessages(Array.isArray(msgs) ? (msgs as Message[]) : []);
+				setChatReady(true);
+			})
+			.catch(() => {
+				if (cancelled) return;
+				setInitialMessages([]);
+				setChatReady(true);
+			});
+		return () => {
+			cancelled = true;
+		};
+	}, [activeThreadId]);
 
 	const handleTitleUpdate = useCallback(
 		(title: string) => {
@@ -81,6 +108,10 @@ function App() {
 			setTimeout(() => setChangedKeys([]), 2000);
 			return next;
 		});
+	}, []);
+
+	const handleImprove = useCallback(() => {
+		improveRef.current?.();
 	}, []);
 
 	const handlePaperSelect = useCallback(
@@ -290,6 +321,7 @@ function App() {
 									onUpdate={handleRecipeUpdate}
 									isLoading={isAiLoading}
 									changedKeys={changedKeys}
+									onImprove={handleImprove}
 								/>
 							</div>
 						)}
@@ -317,14 +349,19 @@ function App() {
 									<Loader2 className="w-6 h-6 text-zinc-400 animate-spin" />
 								</div>
 							)}
-							{!loading && activeThreadId && (
+							{!loading && activeThreadId && chatReady && (
 								<ErrorBoundary>
 									<Chat
 										key={activeThreadId}
 										threadId={activeThreadId}
+										initialMessages={initialMessages}
 										onTitleUpdate={handleTitleUpdate}
+										recipe={recipe}
 										onRecipeUpdate={handleRecipeUpdate}
 										onLoadingChange={setIsAiLoading}
+										registerImprove={(fn) => {
+											improveRef.current = fn;
+										}}
 									/>
 								</ErrorBoundary>
 							)}
