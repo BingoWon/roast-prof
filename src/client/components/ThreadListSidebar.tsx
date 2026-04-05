@@ -129,18 +129,20 @@ const RuntimeThreadItem: FC = () => {
 
 	return (
 		<ThreadListItemPrimitive.Root
-			className={`${ITEM_BASE} ${isActive ? ITEM_ACTIVE : ITEM_IDLE}`}
+			className={`relative ${ITEM_BASE} ${isActive ? ITEM_ACTIVE : ITEM_IDLE}`}
 		>
+			{/* Trigger covers the full row as click target */}
 			<ThreadListItemPrimitive.Trigger
-				className="flex items-center gap-2 overflow-hidden flex-1 min-w-0 cursor-pointer"
+				className="absolute inset-0 cursor-pointer"
 				onDoubleClick={() => setEditing(true)}
-			>
+			/>
+			<div className="flex items-center gap-2 overflow-hidden flex-1 min-w-0 pointer-events-none">
 				<MessageSquare className="w-4 h-4 opacity-50 shrink-0" />
 				<span className="truncate">
-					<ThreadListItemPrimitive.Title fallback="新对话" />
+					<ThreadListItemPrimitive.Title fallback="新��话" />
 				</span>
-			</ThreadListItemPrimitive.Trigger>
-			<div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition shrink-0">
+			</div>
+			<div className="relative z-10 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition shrink-0">
 				<span
 					role="button"
 					tabIndex={-1}
@@ -149,7 +151,7 @@ const RuntimeThreadItem: FC = () => {
 						setEditing(true);
 					}}
 					onKeyDown={() => {}}
-					className="p-1 hover:text-blue-500 transition cursor-pointer"
+					className="p-1 hover:text-blue-500 transition cursor-pointer pointer-events-auto"
 				>
 					<Pencil className="w-3 h-3" />
 				</span>
@@ -157,7 +159,7 @@ const RuntimeThreadItem: FC = () => {
 					<span
 						role="button"
 						tabIndex={-1}
-						className="p-1 hover:text-red-500 transition cursor-pointer"
+						className="p-1 hover:text-red-500 transition cursor-pointer pointer-events-auto"
 					>
 						<X className="w-3.5 h-3.5" />
 					</span>

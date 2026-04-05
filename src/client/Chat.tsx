@@ -443,7 +443,21 @@ export function Chat({
 					turnAnchor="top"
 					className="relative flex flex-1 flex-col overflow-x-auto overflow-y-scroll scroll-smooth px-4 pt-14"
 				>
-					<AuiIf condition={(s) => s.thread.isEmpty}>
+					{/* Existing thread loading → spinner; new thread → welcome */}
+					<AuiIf
+						condition={(s) =>
+							s.thread.isEmpty && !!s.threadListItem.remoteId
+						}
+					>
+						<div className="flex flex-1 items-center justify-center">
+							<Loader2 className="h-5 w-5 animate-spin text-zinc-300 dark:text-zinc-600" />
+						</div>
+					</AuiIf>
+					<AuiIf
+						condition={(s) =>
+							s.thread.isEmpty && !s.threadListItem.remoteId
+						}
+					>
 						<ThreadWelcome />
 					</AuiIf>
 
