@@ -1,4 +1,4 @@
-import type { UIMessage } from "@ai-sdk/react";
+import { type UIMessage, useChat } from "@ai-sdk/react";
 import type { AttachmentAdapter } from "@assistant-ui/react";
 import {
 	AssistantRuntimeProvider,
@@ -7,11 +7,11 @@ import {
 	useRemoteThreadListRuntime,
 	type RemoteThreadListAdapter,
 } from "@assistant-ui/react";
+import { useAISDKRuntime } from "@assistant-ui/react-ai-sdk";
 import {
-	AssistantChatTransport,
-	useChatRuntime,
-} from "@assistant-ui/react-ai-sdk";
-import { lastAssistantMessageIsCompleteWithToolCalls } from "ai";
+	DefaultChatTransport,
+	lastAssistantMessageIsCompleteWithToolCalls,
+} from "ai";
 import { createAssistantStream } from "assistant-stream";
 import {
 	type FC,
@@ -138,39 +138,54 @@ function ThreadAdapterProvider({ children }: { children: ReactNode }) {
 }
 
 // ── Runtime Hook (per-thread) ───────────────────────────────────────────────
-// Loads messages from server for existing threads, passes to useChatRuntime.
+// Uses useChat + useAISDKRuntime directly (not useChatRuntime) so we can
+// call chat.setMessages() after loading history from the server.
 
 function useMyRuntime() {
 	const aui = useAui();
 	const state = aui.threadListItem().getState();
 	const threadId = state.remoteId ?? state.id;
 
-	// Load messages for existing threads
-	const [messages, setMessages] = useState<UIMessage[] | undefined>(undefined);
+	// Fetch messages for existing threads
+	const [loadedMessages, setLoadedMessages] = useState<UIMessage[]>([]);
 	useEffect(() => {
-		if (!state.remoteId) {
-			setMessages(undefined);
-			return;
-		}
+		if (!state.remoteId) return;
+		let cancelled = false;
 		fetch(`/api/threads/${state.remoteId}/messages`)
 			.then((r) => (r.ok ? r.json() : []))
-			.then((msgs) => setMessages(msgs as UIMessage[]))
-			.catch(() => setMessages(undefined));
+			.then((msgs) => {
+				if (!cancelled) setLoadedMessages(msgs as UIMessage[]);
+			})
+			.catch(() => {});
+		return () => {
+			cancelled = true;
+		};
 	}, [state.remoteId]);
 
 	const transport = useMemo(
 		() =>
-			new AssistantChatTransport({
+			new DefaultChatTransport({
 				api: "/api/chat",
 				headers: { "x-thread-id": threadId },
 			}),
 		[threadId],
 	);
 
-	return useChatRuntime({
+	const chat = useChat({
+		id: threadId,
 		transport,
-		messages,
 		sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithToolCalls,
+	});
+
+	// Sync loaded messages into the Chat instance after fetch completes
+	useEffect(() => {
+		if (loadedMessages.length > 0) {
+			chat.setMessages(loadedMessages);
+		}
+	}, [loadedMessages, chat.setMessages]);
+
+	return useAISDKRuntime(chat, {
+		adapters: { attachments: attachmentAdapter },
 	});
 }
 
