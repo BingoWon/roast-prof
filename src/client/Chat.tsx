@@ -1,4 +1,3 @@
-import type { ToolCallMessagePartProps } from "@assistant-ui/react";
 import {
 	ActionBarPrimitive,
 	AttachmentPrimitive,
@@ -30,33 +29,19 @@ import {
 	Square,
 	X,
 } from "lucide-react";
-import {
-	createContext,
-	type FC,
-	useContext,
-	useEffect,
-	useMemo,
-	useRef,
-	useState,
-} from "react";
+import { createContext, type FC, useEffect, useMemo, useState } from "react";
 import { Button } from "./components/ui/button";
 import { MarkdownText } from "./components/ui/markdown-text";
 import { TooltipIconButton } from "./components/ui/tooltip-icon-button";
 import type { Recipe } from "./components/RecipePanel";
 import { ReasoningPart } from "./components/message/ReasoningPart";
-import {
-	PaperSearchToolUI,
-	SuggestSearchToolUI,
-} from "./components/tools/PaperSearchToolUI";
-import { SearchToolUI } from "./components/tools/SearchToolUI";
 import { ToolCallFallback } from "./components/tools/ToolCallFallback";
-import { WeatherToolUI } from "./components/tools/WeatherToolUI";
 
 // ── Recipe Update Context ────────────────────────────────────────────────────
 
-const RecipeUpdateCtx = createContext<((data: Partial<Recipe>) => void) | null>(
-	null,
-);
+export const RecipeUpdateCtx = createContext<
+	((data: Partial<Recipe>) => void) | null
+>(null);
 
 // ── Attachment Components ────────────────────────────────────────────────────
 
@@ -284,17 +269,7 @@ const AssistantMessage: FC = () => (
 				components={{
 					Text: MarkdownText,
 					Reasoning: ReasoningPart,
-					tools: {
-						Fallback: ToolCallFallback,
-						by_name: {
-							get_weather: WeatherToolUI,
-							search_web: SearchToolUI,
-							rag_suggest: SuggestSearchToolUI,
-							rag_search: PaperSearchToolUI,
-							update_recipe: RecipeToolUI,
-						save_memory: SaveMemoryToolUI,
-						},
-					},
+					tools: { Fallback: ToolCallFallback },
 				}}
 			/>
 			<MessageError />
@@ -433,57 +408,6 @@ const MemoryIndicator: FC = () => {
 					</div>
 				</div>
 			)}
-		</div>
-	);
-};
-
-// ── Tool UIs ─────────────────────────────────────────────────────────────────
-
-const SaveMemoryToolUI: FC<ToolCallMessagePartProps> = ({
-	args,
-	result,
-	isError,
-}) => {
-	const a = args as { content?: string } | undefined;
-	if (isError)
-		return <div className="mb-2 text-xs text-red-500">记忆保存失败</div>;
-	if (!result) {
-		return (
-			<div className="mb-2 flex items-center gap-2 text-xs text-indigo-600 dark:text-indigo-400">
-				<Loader2 className="w-3.5 h-3.5 animate-spin" /> 正在保存记忆...
-			</div>
-		);
-	}
-	return (
-		<div className="mb-2 flex items-center gap-2 text-xs text-emerald-600 dark:text-emerald-400">
-			<Check className="w-3.5 h-3.5" /> 已记住：{a?.content}
-		</div>
-	);
-};
-
-const RecipeToolUI: FC<ToolCallMessagePartProps> = ({ result, isError }) => {
-	const onRecipeUpdate = useContext(RecipeUpdateCtx);
-	const appliedRef = useRef(false);
-
-	useEffect(() => {
-		if (result && !isError && !appliedRef.current) {
-			appliedRef.current = true;
-			onRecipeUpdate?.(result as Partial<Recipe>);
-		}
-	}, [result, isError, onRecipeUpdate]);
-
-	if (isError)
-		return <div className="mb-2 text-xs text-red-500">食谱更新失败</div>;
-	if (!result) {
-		return (
-			<div className="mb-2 flex items-center gap-2 text-xs text-orange-600 dark:text-orange-400">
-				<Loader2 className="w-3.5 h-3.5 animate-spin" /> 正在更新食谱...
-			</div>
-		);
-	}
-	return (
-		<div className="mb-2 flex items-center gap-2 text-xs text-emerald-600 dark:text-emerald-400">
-			<Check className="w-3.5 h-3.5" /> 食谱已更新
 		</div>
 	);
 };

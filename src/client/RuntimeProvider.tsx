@@ -14,6 +14,14 @@ import {
 } from "ai";
 import { createAssistantStream } from "assistant-stream";
 import {
+	PaperSearchToolUI,
+	SuggestSearchToolUI,
+} from "./components/tools/PaperSearchToolUI";
+import { RecipeToolUI } from "./components/tools/RecipeToolUI";
+import { SaveMemoryToolUI } from "./components/tools/SaveMemoryToolUI";
+import { SearchToolUI } from "./components/tools/SearchToolUI";
+import { WeatherToolUI } from "./components/tools/WeatherToolUI";
+import {
 	type FC,
 	type ReactNode,
 	useEffect,
@@ -230,6 +238,13 @@ export const RuntimeProvider: FC<{ children: ReactNode }> = ({ children }) => {
 
 	return (
 		<AssistantRuntimeProvider runtime={runtime}>
+			{/* Tool UIs self-register by toolName — no central mapping needed */}
+			<WeatherToolUI />
+			<SearchToolUI />
+			<SuggestSearchToolUI />
+			<PaperSearchToolUI />
+			<RecipeToolUI />
+			<SaveMemoryToolUI />
 			{children}
 		</AssistantRuntimeProvider>
 	);
