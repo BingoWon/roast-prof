@@ -20,6 +20,13 @@ import {
 	updateThreadTitle,
 } from "./db";
 import { log } from "./log";
+import {
+	addMemories,
+	deleteMemory,
+	formatMemoriesForPrompt,
+	listMemories,
+	searchMemories,
+} from "./memory";
 import { createModel, createTitleModel, SYSTEM_PROMPT } from "./model";
 import {
 	checkPaperByHash,
@@ -328,6 +335,23 @@ async function generateLLMTitle(env: Env, prompt: string): Promise<string> {
 	return title.trim().replace(/["""''「」『』。，！？、：；]/g, "");
 }
 
+// ── Memories (proxy to Mem0 Cloud) ──────────────────────────────────────────
+
+app.get("/api/memories", async (c) => {
+	const userId = await requireUserId(c);
+	if (!userId) return c.json({ error: "未授权" }, 401);
+	if (!c.env.MEM0_API_KEY) return c.json([]);
+	return c.json(await listMemories(c.env, userId));
+});
+
+app.delete("/api/memories/:id", async (c) => {
+	const userId = await requireUserId(c);
+	if (!userId) return c.json({ error: "未授权" }, 401);
+	if (!c.env.MEM0_API_KEY) return c.json({ ok: true });
+	await deleteMemory(c.env, c.req.param("id"));
+	return c.json({ ok: true });
+});
+
 // ── Health ────────────────────────────────────────────────────────────────────
 
 app.get("/api/health", (c) => c.json({ status: "ok" }));
@@ -403,8 +427,20 @@ app.post("/api/chat", async (c) => {
 			}
 		}
 
+		// ── Retrieve relevant memories ───────────────────────────────────────
+		let retrievedMemories: Awaited<ReturnType<typeof searchMemories>> = [];
+		if (userId && c.env.MEM0_API_KEY) {
+			const lastText = lastUserMsg?.parts
+				?.filter((p: { type: string }) => p.type === "text")
+				.map((p: { text?: string }) => p.text ?? "")
+				.join(" ");
+			if (lastText) {
+				retrievedMemories = await searchMemories(c.env, lastText, userId);
+			}
+		}
+
 		// ── Build tools (static + RAG if available) ─────────────────────────
-		const systemPrompt = SYSTEM_PROMPT;
+		const systemPrompt = SYSTEM_PROMPT + formatMemoriesForPrompt(retrievedMemories);
 
 		// biome-ignore lint/suspicious/noExplicitAny: tool generics incompatible with Record
 		let ragTools: Record<string, any> = {};
@@ -425,7 +461,30 @@ app.post("/api/chat", async (c) => {
 			}
 		}
 
-		// ── Stream chat response ─────────────────────────────────────────────
+		// ── Extract memories concurrently with streaming ────────────────────
+		const addMemoriesTask =
+			userId && c.env.MEM0_API_KEY
+				? addMemories(
+						c.env,
+						messages
+							.filter(
+								(m: WireMessage) =>
+									m.role === "user" || m.role === "assistant",
+							)
+							.slice(-6)
+							.map((m: WireMessage) => ({
+								role: m.role as string,
+								content:
+									m.parts
+										?.filter((p: { type: string }) => p.type === "text")
+										.map((p: { text?: string }) => p.text ?? "")
+										.join(" ") ?? "",
+							})),
+						userId,
+					)
+				: Promise.resolve([]);
+
+		// ── Stream chat response ───────────────────────────��─────────────────
 		const wrappedModel = createModel(c.env);
 
 		let resolveFinish!: () => void;
@@ -435,14 +494,19 @@ app.post("/api/chat", async (c) => {
 
 		const uiStream = createUIMessageStream({
 			execute: async ({ writer }) => {
+				// Send retrieved memories as data event
+				if (retrievedMemories.length > 0) {
+					writer.write({
+						type: "data-mem0-get" as "data-mem0-get",
+						data: retrievedMemories,
+					});
+				}
+
 				const modelMessages = await convertToModelMessages(
 					// biome-ignore lint/suspicious/noExplicitAny: wire format → UIMessage
 					resolveDataUrls(messages) as any,
 				);
 
-				// Detect HITL continuation: last model message is a tool-result
-				// → this is a resumed run after addToolResult, disable reasoning
-				// to avoid duplicating the thinking block from the first run
 				const lastModelMsg = modelMessages[modelMessages.length - 1];
 				const isHitlContinuation =
 					lastModelMsg?.role === "tool" ||
@@ -466,6 +530,15 @@ app.post("/api/chat", async (c) => {
 				});
 
 				writer.merge(chatResult.toUIMessageStream({ sendReasoning: true }));
+
+				// Send new/updated memories as data event
+				const newMemories = await addMemoriesTask;
+				if (newMemories.length > 0) {
+					writer.write({
+						type: "data-mem0-update" as "data-mem0-update",
+						data: newMemories,
+					});
+				}
 			},
 			onFinish: async ({ messages: finishedMessages }) => {
 				try {
