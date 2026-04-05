@@ -24,6 +24,7 @@ import {
 	ThreadListSidebar,
 } from "./components/ThreadListSidebar";
 import { useResizableLayout } from "./hooks/useResizableLayout";
+import { useUrlSync } from "./hooks/useUrlSync";
 import { RuntimeProvider } from "./RuntimeProvider";
 
 type CenterTab = "recipe" | "paper";
@@ -175,6 +176,7 @@ function App() {
 
 			<Show when="signed-in">
 				<RuntimeProvider>
+					<UrlSync sidebarTab={sidebarTab} setSidebarTab={setSidebarTab} />
 					<div
 						ref={containerRef}
 						className={`flex-1 flex h-full overflow-hidden pt-2 pb-2 gap-1.5 z-10 ${layout.leftCollapsed ? "pl-0" : "pl-2"} ${layout.rightCollapsed ? "pr-0" : "pr-2"}`}
@@ -316,5 +318,14 @@ function App() {
 		</main>
 	);
 }
+
+// Renders nothing — just runs the URL sync hook inside RuntimeProvider context
+const UrlSync: FC<{
+	sidebarTab: SidebarTab;
+	setSidebarTab: (tab: SidebarTab) => void;
+}> = ({ sidebarTab, setSidebarTab }) => {
+	useUrlSync(sidebarTab, setSidebarTab);
+	return null;
+};
 
 export default App;

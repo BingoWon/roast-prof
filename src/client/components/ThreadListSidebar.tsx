@@ -35,7 +35,7 @@ import {
 	useState,
 } from "react";
 
-export type SidebarTab = "chat" | "rag" | "memory";
+export type SidebarTab = "chat" | "papers" | "memory";
 
 export const ThreadListSidebar: FC<{
 	activePaperId: string | null;
@@ -55,7 +55,7 @@ export const ThreadListSidebar: FC<{
 				{(
 					[
 						{ id: "chat", label: "对话", icon: MessageSquare },
-						{ id: "rag", label: "资料", icon: BookOpen },
+						{ id: "papers", label: "资料", icon: BookOpen },
 						{ id: "memory", label: "记忆", icon: Brain },
 					] as const
 				).map((tab) => (
@@ -97,7 +97,7 @@ export const ThreadListSidebar: FC<{
 				</>
 			)}
 
-			{activeTab === "rag" && (
+			{activeTab === "papers" && (
 				<PapersPanel
 					activePaperId={activePaperId}
 					onPaperSelect={onPaperSelect}
