@@ -374,7 +374,10 @@ app.post("/api/chat", async (c) => {
 		const db = createDb(c.env.DB);
 		const lastUserMsg = [...messages].reverse().find((m) => m.role === "user");
 
-		// ── Persist user message ──────────────────────────────────────────────
+		// ── Persist user message + fire-and-forget title generation ─────────
+		const userMessages = messages.filter((m) => m.role === "user");
+		const isFirstMessage = userMessages.length === 1;
+
 		if (threadId && userId && lastUserMsg) {
 			try {
 				await ensureThread(db, threadId, userId);
@@ -391,6 +394,27 @@ app.post("/api/chat", async (c) => {
 					},
 				]);
 				await touchThread(db, threadId, userId);
+
+				// Generate title immediately on first message (fire-and-forget)
+				if (isFirstMessage) {
+					const firstText = parts
+						.filter((p: { type: string }) => p.type === "text")
+						.map((p: { text?: string }) => p.text ?? "")
+						.join(" ")
+						.slice(0, 200);
+					if (firstText) {
+						c.executionCtx.waitUntil(
+							generateLLMTitle(
+								c.env,
+								`为以下用户消息生成简洁中文标题，4-8个字，无标点无引号，只回复标题：\n${firstText}`,
+							)
+								.then((title) => {
+									if (title) updateThreadTitle(db, threadId, userId, title);
+								})
+								.catch(() => {}),
+						);
+					}
+				}
 			} catch (e) {
 				log.error({
 					module: "chat",

@@ -107,37 +107,22 @@ const threadListAdapter: RemoteThreadListAdapter = {
 		return { remoteId, status: "regular" as const };
 	},
 
-	async generateTitle(remoteId, messages) {
+	async generateTitle(_remoteId, messages) {
+		// Quick client-side placeholder — the server generates the real LLM title
+		// on first message (fire-and-forget in /api/chat), so next list() refresh
+		// will pick up the proper title.
 		return createAssistantStream(async (controller) => {
 			const firstUser = messages.find((m) => m.role === "user");
-			const text = firstUser?.content
-				?.filter((c): c is { type: "text"; text: string } => c.type === "text")
-				.map((c) => c.text)
-				.join(" ");
-
-			if (!text) {
-				controller.appendText("新对话");
-				return;
-			}
-
-			try {
-				const res = await fetch(
-					`/api/threads/${remoteId}/generate-title`,
-					{
-						method: "POST",
-						headers: { "Content-Type": "application/json" },
-						body: JSON.stringify({ text: text.slice(0, 200) }),
-					},
-				);
-				if (res.ok) {
-					const { title } = (await res.json()) as { title: string };
-					controller.appendText(title || text.slice(0, 50));
-				} else {
-					controller.appendText(text.slice(0, 50));
-				}
-			} catch {
-				controller.appendText(text.slice(0, 50));
-			}
+			const text =
+				firstUser?.content
+					?.filter(
+						(c): c is { type: "text"; text: string } => c.type === "text",
+					)
+					.map((c) => c.text)
+					.join(" ") ?? "";
+			controller.appendText(
+				text ? text.slice(0, 30) + (text.length > 30 ? "…" : "") : "新对话",
+			);
 		});
 	},
 

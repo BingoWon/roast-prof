@@ -296,7 +296,7 @@ function App() {
 						) : (
 							<div
 								style={{ width: layout.rightWidth }}
-								className="h-full flex-shrink-0 overflow-hidden rounded-2xl bg-white/50 dark:bg-zinc-900/50 backdrop-blur-sm border border-white/60 dark:border-zinc-700/50"
+								className="h-full flex-shrink-0 overflow-hidden rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200/60 dark:border-zinc-700/50"
 							>
 								<ErrorBoundary>
 									<Chat

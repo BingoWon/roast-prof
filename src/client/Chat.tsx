@@ -132,7 +132,7 @@ const ThreadWelcome: FC = () => {
 
 const Composer: FC = () => (
 	<ComposerPrimitive.Root className="relative flex w-full flex-col">
-		<ComposerPrimitive.AttachmentDropzone className="flex w-full flex-col rounded-2xl border border-zinc-200 dark:border-zinc-700 bg-white/70 dark:bg-zinc-800/70 px-1 pt-2 outline-none backdrop-blur-xl transition-shadow has-[textarea:focus-visible]:border-blue-400/40 has-[textarea:focus-visible]:ring-2 has-[textarea:focus-visible]:ring-blue-400/10 data-[dragging=true]:border-blue-400 data-[dragging=true]:border-dashed data-[dragging=true]:bg-blue-50/50 dark:data-[dragging=true]:bg-blue-950/20">
+		<ComposerPrimitive.AttachmentDropzone className="flex w-full flex-col rounded-2xl border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800 px-1 pt-2 outline-none transition-shadow has-[textarea:focus-visible]:border-blue-400/40 has-[textarea:focus-visible]:ring-2 has-[textarea:focus-visible]:ring-blue-400/10 data-[dragging=true]:border-blue-400 data-[dragging=true]:border-dashed data-[dragging=true]:bg-blue-50 dark:data-[dragging=true]:bg-blue-950/30">
 			<div className="flex flex-wrap gap-2 px-3 pt-1 pb-0 empty:hidden">
 				<ComposerPrimitive.Attachments
 					components={{ Attachment: ComposerAttachment }}
@@ -500,7 +500,7 @@ export function Chat({
 						}}
 					/>
 
-					<ThreadPrimitive.ViewportFooter className="sticky bottom-0 mx-auto mt-auto flex w-full max-w-[var(--thread-max-width)] flex-col gap-4 overflow-visible rounded-t-3xl bg-gradient-to-t from-white/80 via-white/60 dark:from-zinc-900/80 dark:via-zinc-900/60 to-transparent backdrop-blur-sm pb-4">
+					<ThreadPrimitive.ViewportFooter className="sticky bottom-0 mx-auto mt-auto flex w-full max-w-[var(--thread-max-width)] flex-col gap-4 overflow-visible rounded-t-3xl bg-gradient-to-t from-white via-white/90 dark:from-zinc-900 dark:via-zinc-900/90 to-transparent pb-4">
 						<ThreadScrollToBottom />
 						<Composer />
 					</ThreadPrimitive.ViewportFooter>
