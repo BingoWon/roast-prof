@@ -176,14 +176,23 @@ function ThreadAdapterProvider({ children }: { children: ReactNode }) {
 function hasHitlToolWithResult({ messages }: { messages: UIMessage[] }): boolean {
 	const last = messages[messages.length - 1];
 	if (!last || last.role !== "assistant") return false;
-	// Check if the last message has a rag_suggest tool with output
-	return last.parts.some((p) => {
+	const result = last.parts.some((p) => {
 		const part = p as { type: string; toolName?: string; state?: string };
 		return (
 			part.type === "tool-rag_suggest" &&
 			part.state === "output-available"
 		);
 	});
+	// DEBUG: log every check
+	console.log("[sendAutomatically]", {
+		result,
+		partsCount: last.parts.length,
+		parts: last.parts.map((p) => {
+			const part = p as { type: string; state?: string; toolName?: string };
+			return { type: part.type, state: part.state, toolName: part.toolName };
+		}),
+	});
+	return result;
 }
 
 // ── Runtime Hook (per-thread) ───────────────────────────────────────────────

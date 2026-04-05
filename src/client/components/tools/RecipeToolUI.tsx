@@ -8,9 +8,20 @@ type RecipeArgs = Partial<Recipe>;
 
 export const RecipeToolUI = makeAssistantToolUI<RecipeArgs, RecipeArgs>({
 	toolName: "update_recipe",
-	render: ({ args, result, status }) => {
+	render: ({ args, argsText, result, status }) => {
 		const onRecipeUpdate = useContext(RecipeUpdateCtx);
-		const { propStatus } = useToolArgsStatus<RecipeArgs>();
+		const { status: argsStatus, propStatus } = useToolArgsStatus<RecipeArgs>();
+
+		// DEBUG
+		console.log("[RecipeToolUI]", {
+			statusType: status.type,
+			argsStatus,
+			propStatus,
+			argsKeys: args ? Object.keys(args) : [],
+			argsTextLen: argsText?.length,
+			argsTextPreview: argsText?.slice(0, 100),
+			hasResult: !!result,
+		});
 
 		// Stream partial args to RecipePanel in real-time
 		const prevArgsRef = useRef<string>("");
