@@ -90,7 +90,9 @@ async function parseWithPaddleOCR(
 				useDocOrientationClassify: true,
 				useDocUnwarping: true,
 				useLayoutDetection: true,
-				useChartRecognition: true,
+				// 图表识别会输出大量 HTML table 代码，严重干扰 RAG 分块和检索质量
+				useChartRecognition: false,
+				prettifyMarkdown: true,
 			}),
 			signal: controller.signal,
 		});
