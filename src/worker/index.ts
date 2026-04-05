@@ -338,8 +338,9 @@ app.post("/api/chat", async (c) => {
 		const threadId = c.req.header("x-thread-id") || undefined;
 		const userId = await requireUserId(c);
 
-		if (!c.env.API_KEY) return c.json({ error: "缺少 API_KEY 配置" }, 500);
-		if (!c.env.MODEL) return c.json({ error: "缺少 MODEL 配置" }, 500);
+		if (!c.env.LLM_API_KEY)
+			return c.json({ error: "缺少 LLM_API_KEY 配置" }, 500);
+		if (!c.env.LLM_MODEL) return c.json({ error: "缺少 LLM_MODEL 配置" }, 500);
 
 		const db = createDb(c.env.DB);
 		const lastUserMsg = [...messages].reverse().find((m) => m.role === "user");

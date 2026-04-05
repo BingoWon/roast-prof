@@ -18,6 +18,7 @@ import {
 	lastAssistantMessageIsCompleteWithToolCalls,
 } from "ai";
 import {
+	AlertCircle,
 	Bot,
 	Check,
 	ChevronDown,
@@ -37,6 +38,7 @@ import {
 	useEffect,
 	useMemo,
 	useRef,
+	useState,
 } from "react";
 import { ReasoningPart } from "./components/message/ReasoningPart";
 import { TextPart } from "./components/message/TextPart";
@@ -314,6 +316,40 @@ const RecipeEmptyState: FC<{ onSend: (text: string) => void }> = ({
 	</div>
 );
 
+// ── Error Banner ─────────────────────────────────────────────────────────────
+
+function parseErrorMessage(error: Error): string {
+	const msg = error.message || "";
+	if (msg.includes("API key")) return "API 密钥无效或未配置";
+	if (msg.includes("rate limit") || msg.includes("429"))
+		return "请求过于频繁，请稍后再试";
+	if (msg.includes("timeout") || msg.includes("ETIMEDOUT"))
+		return "请求超时，请检查网络连接";
+	if (msg.includes("fetch failed") || msg.includes("NetworkError"))
+		return "网络连接失败";
+	if (msg.includes("500")) return "服务器内部错误";
+	return msg.length > 100 ? `${msg.slice(0, 100)}…` : msg || "未知错误";
+}
+
+const ErrorBanner: FC<{ error: Error; onDismiss: () => void }> = ({
+	error,
+	onDismiss,
+}) => (
+	<div className="mx-3 mb-2 flex items-center gap-3 rounded-xl bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800/50 px-4 py-3 text-sm animate-in slide-in-from-top-2 duration-200">
+		<AlertCircle className="h-4 w-4 shrink-0 text-red-500" />
+		<span className="flex-1 text-red-700 dark:text-red-300">
+			{parseErrorMessage(error)}
+		</span>
+		<button
+			type="button"
+			onClick={onDismiss}
+			className="shrink-0 rounded-lg p-1 text-red-400 hover:bg-red-100 dark:hover:bg-red-900/30 hover:text-red-600 transition-colors cursor-pointer"
+		>
+			<X className="h-3.5 w-3.5" />
+		</button>
+	</div>
+);
+
 // ── Main Chat ─────────────────────────────────────────────────────────────────
 
 export function Chat({
@@ -359,6 +395,12 @@ export function Chat({
 			}
 		},
 	});
+
+	// ── Error tracking ───────────────────────────────────────────────────
+	const [visibleError, setVisibleError] = useState<Error | null>(null);
+	useEffect(() => {
+		if (chat.error) setVisibleError(chat.error);
+	}, [chat.error]);
 
 	useEffect(() => {
 		onLoadingChange?.(
@@ -411,8 +453,14 @@ export function Chat({
 								</ThreadPrimitive.ScrollToBottom>
 							</ThreadPrimitive.Viewport>
 
-							<ThreadPrimitive.ViewportFooter className="pb-4 pt-3 px-3 sticky bottom-0 bg-gradient-to-t from-white/50 via-white/40 dark:from-zinc-900/50 dark:via-zinc-900/40 to-transparent backdrop-blur-sm z-30">
-								<ComposerPrimitive.Root className="flex w-full flex-col rounded-2xl bg-white/70 dark:bg-zinc-800/70 p-2 shadow-sm border border-white/60 dark:border-zinc-700/50 backdrop-blur-xl transition-all focus-within:border-blue-400/40 focus-within:ring-2 focus-within:ring-blue-400/10">
+							<ThreadPrimitive.ViewportFooter className="pb-4 pt-3 sticky bottom-0 bg-gradient-to-t from-white/50 via-white/40 dark:from-zinc-900/50 dark:via-zinc-900/40 to-transparent backdrop-blur-sm z-30">
+								{visibleError && (
+									<ErrorBanner
+										error={visibleError}
+										onDismiss={() => setVisibleError(null)}
+									/>
+								)}
+								<ComposerPrimitive.Root className="mx-3 flex w-auto flex-col rounded-2xl bg-white/70 dark:bg-zinc-800/70 p-2 shadow-sm border border-white/60 dark:border-zinc-700/50 backdrop-blur-xl transition-all focus-within:border-blue-400/40 focus-within:ring-2 focus-within:ring-blue-400/10">
 									<div className="flex flex-wrap gap-2 px-1 pt-1 pb-0 empty:hidden">
 										<ComposerPrimitive.Attachments
 											components={{ Attachment: ComposerAttachment }}

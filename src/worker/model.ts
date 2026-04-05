@@ -38,8 +38,8 @@ RAG 资料库检索规则（Human-in-the-Loop）：
 
 export function createProvider(env: Env) {
 	return createOpenAI({
-		baseURL: env.BASE_URL,
-		apiKey: env.API_KEY,
+		baseURL: env.LLM_BASE_URL,
+		apiKey: env.LLM_API_KEY,
 		fetch: async (url, options) => {
 			const raw = await fetch(url as string, options as RequestInit);
 			return transformReasoningSSE(raw);
@@ -50,16 +50,16 @@ export function createProvider(env: Env) {
 export function createModel(env: Env) {
 	const provider = createProvider(env);
 	return wrapLanguageModel({
-		model: provider.chat(env.MODEL),
+		model: provider.chat(env.LLM_MODEL),
 		middleware: extractReasoningMiddleware({ tagName: "think" }),
 	});
 }
 
 export function createTitleModel(env: Env) {
-	const titleModel = env.MODEL;
+	const titleModel = env.LLM_MODEL;
 	const provider = createOpenAI({
-		baseURL: env.BASE_URL,
-		apiKey: env.API_KEY,
+		baseURL: env.LLM_BASE_URL,
+		apiKey: env.LLM_API_KEY,
 	});
 	return provider.chat(titleModel);
 }
