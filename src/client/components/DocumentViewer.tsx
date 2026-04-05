@@ -1,15 +1,9 @@
 import { Eraser, Loader2 } from "lucide-react";
 import Mark from "mark.js";
-import {
-	type FC,
-	useCallback,
-	useEffect,
-	useRef,
-	useState,
-} from "react";
-import type { HighlightItem } from "../Chat";
+import { type FC, useCallback, useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import type { HighlightItem } from "../Chat";
 
 // ── Highlight colors ────────────────────────────────────────────────────────
 
@@ -22,7 +16,9 @@ const HL_COLORS = [
 ];
 
 function getHlMarkClass(color: string) {
-	return HL_COLORS.find((c) => c.name === color)?.markClass ?? HL_COLORS[0].markClass;
+	return (
+		HL_COLORS.find((c) => c.name === color)?.markClass ?? HL_COLORS[0].markClass
+	);
 }
 
 // ── Markdown components ─────────────────────────────────────────────────────
@@ -47,7 +43,6 @@ export const DocumentViewer: FC<{
 	scrollToHlId?: string | null;
 	onScrollToHlDone?: () => void;
 	onAddHighlight?: (text: string, color: string) => void;
-	onRemoveHighlight?: (hlId: string) => void;
 	onClearHighlights?: () => void;
 }> = ({
 	docId,
@@ -56,7 +51,6 @@ export const DocumentViewer: FC<{
 	scrollToHlId,
 	onScrollToHlDone,
 	onAddHighlight,
-	onRemoveHighlight,
 	onClearHighlights,
 }) => {
 	const [markdown, setMarkdown] = useState<string | null>(null);
@@ -92,9 +86,7 @@ export const DocumentViewer: FC<{
 			fetch(mdUrl).then((r) => (r.ok ? r.text() : null)),
 			fetch(chunkUrl)
 				.then((r) => (r.ok ? r.json() : null))
-				.then(
-					(data) => (data as { chunks: string[] } | null)?.chunks ?? null,
-				),
+				.then((data) => (data as { chunks: string[] } | null)?.chunks ?? null),
 		])
 			.then(([md, ch]) => {
 				if (cancelled) return;
@@ -116,6 +108,7 @@ export const DocumentViewer: FC<{
 	}, [docId, viewLang]);
 
 	// ── mark.js: create instance after content renders ────────────────────
+	// biome-ignore lint/correctness/useExhaustiveDependencies: re-create when content changes
 	useEffect(() => {
 		if (!contentRef.current || loading) return;
 		markRef.current = new Mark(contentRef.current);
@@ -129,73 +122,84 @@ export const DocumentViewer: FC<{
 		const m = markRef.current;
 		if (!m || loading) return;
 
-		m.unmark({ done: () => {
-			let lastHlId: string | null = null;
+		m.unmark({
+			done: () => {
+				for (const hl of highlights) {
+					const hlClass = getHlMarkClass(hl.color);
+					// Use data attribute for reliable querying (CSS class selectors
+					// break with UUIDs that start with digits after the prefix)
+					const markOpts = {
+						element: "mark",
+						className: `doc-hl ${hlClass}`,
+						acrossElements: true,
+						separateWordSearch: false,
+						each: (el: Element) => {
+							(el as HTMLElement).dataset.hlId = hl.id;
+						},
+					};
 
-			for (const hl of highlights) {
-				const hlClass = getHlMarkClass(hl.color);
-				// Use data attribute for reliable querying (CSS class selectors
-				// break with UUIDs that start with digits after the prefix)
-				const markOpts = {
-					element: "mark",
-					className: `doc-hl ${hlClass}`,
-					acrossElements: true,
-					separateWordSearch: false,
-					each: (el: Element) => {
-						(el as HTMLElement).dataset.hlId = hl.id;
-					},
-				};
-
-				if (!hl.text) {
-					m.markRegExp(/.+/g, markOpts);
-				} else {
-					// Split by line breaks, strip markdown syntax that doesn't
-					// appear in the rendered DOM (checkboxes, bullets, headers, etc.)
-					const lines = hl.text
-						.split(/\n+/)
-						.map((l) =>
-							l
-								.replace(/^#{1,6}\s+/, "")    // ## heading
-								.replace(/^[-*+]\s+(\[[ x]]\s+)?/, "") // - [ ] checkbox / - bullet
-								.replace(/^\d+\.\s+/, "")    // 1. ordered list
-								.replace(/^>\s+/, "")         // > blockquote
-								.replace(/\*\*(.+?)\*\*/g, "$1") // **bold**
-								.replace(/\*(.+?)\*/g, "$1")     // *italic*
-								.replace(/`(.+?)`/g, "$1")       // `code`
-								.trim(),
-						)
-						.filter(Boolean);
-					for (const line of lines) {
-						let found = false;
-						m.mark(line, {
-							...markOpts,
-							accuracy: "exactly",
-							each: (el: Element) => {
-								(el as HTMLElement).dataset.hlId = hl.id;
-								found = true;
-							},
-						});
-						if (!found) {
+					if (!hl.text) {
+						m.markRegExp(/.+/g, markOpts);
+					} else {
+						// Split by line breaks, strip markdown syntax that doesn't
+						// appear in the rendered DOM (checkboxes, bullets, headers, etc.)
+						const lines = hl.text
+							.split(/\n+/)
+							.map((l) =>
+								l
+									.replace(/^#{1,6}\s+/, "") // ## heading
+									.replace(/^[-*+]\s+(\[[ x]]\s+)?/, "") // - [ ] checkbox / - bullet
+									.replace(/^\d+\.\s+/, "") // 1. ordered list
+									.replace(/^>\s+/, "") // > blockquote
+									.replace(/\*\*(.+?)\*\*/g, "$1") // **bold**
+									.replace(/\*(.+?)\*/g, "$1") // *italic*
+									.replace(/`(.+?)`/g, "$1") // `code`
+									.trim(),
+							)
+							.filter(Boolean);
+						for (const line of lines) {
+							let found = false;
 							m.mark(line, {
 								...markOpts,
-								accuracy: "partially",
+								accuracy: "exactly",
+								each: (el: Element) => {
+									(el as HTMLElement).dataset.hlId = hl.id;
+									found = true;
+								},
 							});
+							if (!found) {
+								m.mark(line, {
+									...markOpts,
+									accuracy: "partially",
+								});
+							}
 						}
 					}
 				}
-				lastHlId = hl.id;
-			}
 
-			// Scroll to the target highlight after all marks are applied
-			if (scrollToHlId) {
-				const el = contentRef.current?.querySelector(`[data-hl-id="${scrollToHlId}"]`);
-				if (el) {
-					el.scrollIntoView({ behavior: "smooth", block: "center" });
+				// Scroll to the target highlight — use container.scrollTo
+				// instead of scrollIntoView to prevent parent elements from scrolling
+				if (scrollToHlId && scrollRef.current) {
+					const el = contentRef.current?.querySelector(
+						`[data-hl-id="${scrollToHlId}"]`,
+					);
+					if (el) {
+						const container = scrollRef.current;
+						const elRect = el.getBoundingClientRect();
+						const cRect = container.getBoundingClientRect();
+						const target =
+							container.scrollTop +
+							elRect.top -
+							cRect.top -
+							cRect.height / 2 +
+							elRect.height / 2;
+						container.scrollTo({ top: target, behavior: "smooth" });
+					}
+					onScrollToHlDone?.();
 				}
-				onScrollToHlDone?.();
-			}
-		}});
-	}, [highlights, loading, markdown, chunks, scrollToHlId, onScrollToHlDone]);
+			},
+		});
+	}, [highlights, loading, scrollToHlId, onScrollToHlDone]);
 
 	// ── Selection tracking for floating toolbar ──────────────────────────
 	const handleMouseUp = useCallback(() => {
@@ -217,7 +221,8 @@ export const DocumentViewer: FC<{
 
 		// Use the first line rect for positioning (not the full bounding box)
 		const rects = range.getClientRects();
-		const firstRect = rects.length > 0 ? rects[0] : range.getBoundingClientRect();
+		const firstRect =
+			rects.length > 0 ? rects[0] : range.getBoundingClientRect();
 
 		setSelToolbar({
 			x: firstRect.left + firstRect.width / 2 - containerRect.left,
@@ -272,7 +277,7 @@ export const DocumentViewer: FC<{
 	const showChunks = viewLang !== "zh" && chunks && chunks.length > 0;
 
 	return (
-		// biome-ignore lint/a11y/useKeyWithClickEvents: selection tracking
+		// biome-ignore lint/a11y/noStaticElementInteractions: text selection tracking
 		<div
 			ref={scrollRef}
 			className="flex-1 overflow-y-auto overflow-x-hidden py-6 relative"
@@ -318,7 +323,11 @@ export const DocumentViewer: FC<{
 					<button
 						type="button"
 						onMouseDown={(e) => e.preventDefault()}
-						onClick={() => { onClearHighlights?.(); window.getSelection()?.removeAllRanges(); setSelToolbar(null); }}
+						onClick={() => {
+							onClearHighlights?.();
+							window.getSelection()?.removeAllRanges();
+							setSelToolbar(null);
+						}}
 						className="w-6 h-6 rounded-full flex items-center justify-center cursor-pointer transition-transform hover:scale-125 bg-zinc-100 dark:bg-zinc-700 ring-1 ring-black/10 dark:ring-white/10"
 					>
 						<Eraser className="w-3 h-3 text-zinc-500 dark:text-zinc-400" />
@@ -330,14 +339,18 @@ export const DocumentViewer: FC<{
 			<div ref={contentRef} className="max-w-3xl mx-auto px-8">
 				{showChunks ? (
 					<div className="relative">
-						{chunks.map((chunk, i) => (
-							<ChunkBlock
-								key={`chunk-${i}`}
-								index={i}
-								total={chunks.length}
-								content={chunk}
-							/>
-						))}
+						{chunks.map((chunk, i) => {
+							const chunkKey =
+								chunk.slice(0, 32).replace(/\W/g, "") || String(i);
+							return (
+								<ChunkBlock
+									key={chunkKey}
+									index={i}
+									total={chunks.length}
+									content={chunk}
+								/>
+							);
+						})}
 					</div>
 				) : (
 					<div className="prose prose-sm prose-zinc dark:prose-invert max-w-none prose-p:leading-relaxed prose-headings:font-bold prose-pre:bg-zinc-100 dark:prose-pre:bg-zinc-900 prose-pre:border prose-pre:border-zinc-200 dark:prose-pre:border-zinc-800">

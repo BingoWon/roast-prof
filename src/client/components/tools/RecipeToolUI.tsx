@@ -4,7 +4,10 @@ import { useContext, useEffect, useRef } from "react";
 import { RecipeUpdateCtx } from "../../Chat";
 import type { Recipe } from "../RecipePanel";
 
-export const RecipeToolUI = makeAssistantToolUI<Partial<Recipe>, Partial<Recipe>>({
+export const RecipeToolUI = makeAssistantToolUI<
+	Partial<Recipe>,
+	Partial<Recipe>
+>({
 	toolName: "update_recipe",
 	render: ({ result, status }) => {
 		const onRecipeUpdate = useContext(RecipeUpdateCtx);

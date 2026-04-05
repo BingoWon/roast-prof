@@ -2,10 +2,10 @@ import { type UIMessage, useChat } from "@ai-sdk/react";
 import type { AttachmentAdapter } from "@assistant-ui/react";
 import {
 	AssistantRuntimeProvider,
+	type RemoteThreadListAdapter,
 	RuntimeAdapterProvider,
 	useAui,
 	useRemoteThreadListRuntime,
-	type RemoteThreadListAdapter,
 } from "@assistant-ui/react";
 import { useAISDKRuntime } from "@assistant-ui/react-ai-sdk";
 import {
@@ -13,6 +13,14 @@ import {
 	lastAssistantMessageIsCompleteWithToolCalls,
 } from "ai";
 import { createAssistantStream } from "assistant-stream";
+import {
+	type FC,
+	type ReactNode,
+	useEffect,
+	useMemo,
+	useRef,
+	useState,
+} from "react";
 import { AcademicSearchToolUI } from "./components/tools/AcademicSearchToolUI";
 import { AskUserToolUI } from "./components/tools/AskUserToolUI";
 import {
@@ -25,14 +33,6 @@ import { ReadDocToolUI } from "./components/tools/ReadDocToolUI";
 import { RecipeToolUI } from "./components/tools/RecipeToolUI";
 import { SaveMemoryToolUI } from "./components/tools/SaveMemoryToolUI";
 import { SearchToolUI } from "./components/tools/SearchToolUI";
-import {
-	type FC,
-	type ReactNode,
-	useEffect,
-	useMemo,
-	useRef,
-	useState,
-} from "react";
 
 // ── Attachment Adapter ──────────────────────────────────────────────────────
 
@@ -140,14 +140,11 @@ const threadListAdapter: RemoteThreadListAdapter = {
 
 			// Call server to generate + persist LLM title in one step
 			try {
-				const res = await fetch(
-					`/api/threads/${remoteId}/generate-title`,
-					{
-						method: "POST",
-						headers: { "Content-Type": "application/json" },
-						body: JSON.stringify({ text: text.slice(0, 200) }),
-					},
-				);
+				const res = await fetch(`/api/threads/${remoteId}/generate-title`, {
+					method: "POST",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify({ text: text.slice(0, 200) }),
+				});
 				if (res.ok) {
 					const { title } = (await res.json()) as { title: string };
 					controller.appendText(title || text.slice(0, 30));
@@ -174,7 +171,6 @@ function ThreadAdapterProvider({ children }: { children: ReactNode }) {
 		</RuntimeAdapterProvider>
 	);
 }
-
 
 // ── Runtime Hook (per-thread) ───────────────────────────────────────────────
 // Uses useChat + useAISDKRuntime directly (not useChatRuntime) so we can

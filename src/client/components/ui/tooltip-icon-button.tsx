@@ -1,4 +1,4 @@
-import { forwardRef, type ButtonHTMLAttributes, type ReactNode } from "react";
+import { type ButtonHTMLAttributes, forwardRef, type ReactNode } from "react";
 import { cn } from "../../lib/utils";
 
 type Variant = "default" | "outline" | "ghost";
@@ -26,21 +26,33 @@ export const TooltipIconButton = forwardRef<
 		size?: Size;
 		children: ReactNode;
 	}
->(({ tooltip, variant = "ghost", size = "icon", className, children, ...props }, ref) => (
-	<button
-		ref={ref}
-		type="button"
-		title={tooltip}
-		className={cn(
-			"inline-flex items-center justify-center rounded-md transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed",
-			variantStyles[variant],
-			sizeStyles[size],
+>(
+	(
+		{
+			tooltip,
+			variant = "ghost",
+			size = "icon",
 			className,
-		)}
-		{...props}
-	>
-		{children}
-	</button>
-));
+			children,
+			...props
+		},
+		ref,
+	) => (
+		<button
+			ref={ref}
+			type="button"
+			title={tooltip}
+			className={cn(
+				"inline-flex items-center justify-center rounded-md transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed",
+				variantStyles[variant],
+				sizeStyles[size],
+				className,
+			)}
+			{...props}
+		>
+			{children}
+		</button>
+	),
+);
 
 TooltipIconButton.displayName = "TooltipIconButton";

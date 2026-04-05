@@ -1,5 +1,5 @@
 import { makeAssistantToolUI } from "@assistant-ui/react";
-import { BookOpen, Check, Loader2, X } from "lucide-react";
+import { BookOpen, Loader2, X } from "lucide-react";
 import { useContext, useEffect, useRef } from "react";
 import { DocSelectCtx } from "../../Chat";
 

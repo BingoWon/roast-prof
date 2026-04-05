@@ -36,7 +36,8 @@ export function useUrlSync(
 		if (found) {
 			if (found.id !== mainThreadId) aui.threads().switchToThread(found.id);
 		} else if (threadIds?.includes(urlRemoteId)) {
-			if (urlRemoteId !== mainThreadId) aui.threads().switchToThread(urlRemoteId);
+			if (urlRemoteId !== mainThreadId)
+				aui.threads().switchToThread(urlRemoteId);
 		} else {
 			window.history.replaceState(null, "", "/");
 		}

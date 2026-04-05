@@ -1,5 +1,5 @@
 import { useMessagePartReasoning } from "@assistant-ui/react";
-import { ChevronRight, Copy, Check } from "lucide-react";
+import { Check, ChevronRight, Copy } from "lucide-react";
 import { type FC, useEffect, useRef, useState } from "react";
 
 const AUTO_CLOSE_DELAY = 1000;

@@ -1,4 +1,3 @@
-import type { FC } from "react";
 import {
 	IconFileTypeBmp,
 	IconFileTypeDoc,
@@ -9,6 +8,7 @@ import {
 	IconFileTypeTxt,
 } from "@tabler/icons-react";
 import { FileText } from "lucide-react";
+import type { FC } from "react";
 
 export const FILE_ICONS: Record<string, FC<{ className?: string }>> = {
 	pdf: IconFileTypePdf,

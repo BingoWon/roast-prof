@@ -34,7 +34,8 @@ export const ReadDocToolUI = makeAssistantToolUI<Args, Result>({
 		return (
 			<div className="mb-2 flex items-center gap-2 text-xs text-emerald-600 dark:text-emerald-400">
 				<BookOpen className="w-3.5 h-3.5" />
-				已读取「{result.title}」第 {result.page}/{result.totalPages} 页（{result.chunksReturned} 块）
+				已读取「{result.title}」第 {result.page}/{result.totalPages} 页（
+				{result.chunksReturned} 块）
 				{result.hasMore ? "，还有更多内容" : ""}
 			</div>
 		);

@@ -1,6 +1,14 @@
 import { Show, SignInButton, SignUpButton } from "@clerk/react";
-import { ThemeToggle } from "./components/ThemeToggle";
-import { Check, ChefHat, Copy, Globe, Languages, Maximize2, Minimize2, X } from "lucide-react";
+import {
+	Check,
+	ChefHat,
+	Copy,
+	Globe,
+	Languages,
+	Maximize2,
+	Minimize2,
+	X,
+} from "lucide-react";
 import { type FC, useCallback, useEffect, useRef, useState } from "react";
 import { Chat, type HighlightAction, type HighlightItem } from "./Chat";
 import { CollapsedHandle } from "./components/CollapsedHandle";
@@ -12,6 +20,7 @@ import {
 	type Recipe,
 	RecipePanel,
 } from "./components/RecipePanel";
+import { ThemeToggle } from "./components/ThemeToggle";
 import {
 	type SidebarTab,
 	ThreadListSidebar,
@@ -25,11 +34,15 @@ function ssRead<T>(key: string, fallback: T): T {
 	try {
 		const v = sessionStorage.getItem(key);
 		return v ? JSON.parse(v) : fallback;
-	} catch { return fallback; }
+	} catch {
+		return fallback;
+	}
 }
 
 function ssWrite(key: string, value: unknown) {
-	try { sessionStorage.setItem(key, JSON.stringify(value)); } catch {}
+	try {
+		sessionStorage.setItem(key, JSON.stringify(value));
+	} catch {}
 }
 
 type OpenDoc = {
@@ -45,8 +58,12 @@ function App() {
 	const [isAiLoading, setIsAiLoading] = useState(false);
 	const [sidebarTab, setSidebarTab] = useState<SidebarTab>("chat");
 	// Active tab & open docs — persisted in sessionStorage
-	const [activeTab, setActiveTab] = useState<string>(() => ssRead("center:activeTab", "recipe"));
-	const [openDocs, setOpenDocs] = useState<OpenDoc[]>(() => ssRead("center:openDocs", []));
+	const [activeTab, setActiveTab] = useState<string>(() =>
+		ssRead("center:activeTab", "recipe"),
+	);
+	const [openDocs, setOpenDocs] = useState<OpenDoc[]>(() =>
+		ssRead("center:openDocs", []),
+	);
 	const [viewLang, setViewLang] = useState<"original" | "zh">("zh");
 
 	useEffect(() => ssWrite("center:activeTab", activeTab), [activeTab]);
@@ -111,7 +128,10 @@ function App() {
 	const [highlights, setHighlights] = useState<Map<string, HighlightItem[]>>(
 		() => new Map(ssRead<[string, HighlightItem[]][]>("doc:highlights", [])),
 	);
-	useEffect(() => ssWrite("doc:highlights", [...highlights.entries()]), [highlights]);
+	useEffect(
+		() => ssWrite("doc:highlights", [...highlights.entries()]),
+		[highlights],
+	);
 
 	// scrollToHighlight: set after AI highlight to trigger scroll in viewer
 	const [scrollToHl, setScrollToHl] = useState<string | null>(null);
@@ -146,29 +166,13 @@ function App() {
 		[handleDocSelect],
 	);
 
-	const handleRemoveHighlight = useCallback(
-		(docId: string, hlId: string) => {
-			setHighlights((prev) => {
-				const next = new Map(prev);
-				const items = (next.get(docId) ?? []).filter((h) => h.id !== hlId);
-				if (items.length === 0) next.delete(docId);
-				else next.set(docId, items);
-				return next;
-			});
-		},
-		[],
-	);
-
-	const handleClearDocHighlights = useCallback(
-		(docId: string) => {
-			setHighlights((prev) => {
-				const next = new Map(prev);
-				next.delete(docId);
-				return next;
-			});
-		},
-		[],
-	);
+	const handleClearDocHighlights = useCallback((docId: string) => {
+		setHighlights((prev) => {
+			const next = new Map(prev);
+			next.delete(docId);
+			return next;
+		});
+	}, []);
 
 	const handleAddHighlight = useCallback(
 		(docId: string, text: string, color: string) => {
@@ -274,7 +278,9 @@ function App() {
 					>
 						{/* 左栏 */}
 						{layout.leftCollapsed ? (
-							!layout.focused && <CollapsedHandle direction="left" onClick={layout.toggleLeft} />
+							!layout.focused && (
+								<CollapsedHandle direction="left" onClick={layout.toggleLeft} />
+							)
 						) : (
 							<div
 								style={{ width: layout.leftWidth }}
@@ -331,11 +337,13 @@ function App() {
 											>
 												<Icon className="w-3.5 h-3.5 shrink-0" />
 												<span className="truncate">{doc.title}</span>
-												<span
-													role="button"
+												<button
+													type="button"
 													tabIndex={0}
 													onClick={(e) => handleCloseDoc(doc.id, e)}
-													onKeyDown={(e) => { if (e.key === "Enter") handleCloseDoc(doc.id); }}
+													onKeyDown={(e) => {
+														if (e.key === "Enter") handleCloseDoc(doc.id);
+													}}
 													className={`shrink-0 p-0.5 rounded-sm transition-colors ${
 														isActive
 															? "text-white/60 dark:text-zinc-900/60 hover:text-white dark:hover:text-zinc-900 hover:bg-white/20 dark:hover:bg-zinc-900/20"
@@ -343,7 +351,7 @@ function App() {
 													}`}
 												>
 													<X className="w-3 h-3" />
-												</span>
+												</button>
 											</button>
 										);
 									})}
@@ -383,7 +391,10 @@ function App() {
 										)}
 
 										{/* Copy full text */}
-										<CopyButton docId={activeDoc.id} viewLang={activeDoc.lang === "en" ? viewLang : "original"} />
+										<CopyButton
+											docId={activeDoc.id}
+											viewLang={activeDoc.lang === "en" ? viewLang : "original"}
+										/>
 
 										{/* Focus mode */}
 										<button
@@ -392,7 +403,11 @@ function App() {
 											className="p-1.5 rounded-lg text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
 											title={layout.focused ? "退出全屏" : "全屏阅读"}
 										>
-											{layout.focused ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
+											{layout.focused ? (
+												<Minimize2 className="w-3.5 h-3.5" />
+											) : (
+												<Maximize2 className="w-3.5 h-3.5" />
+											)}
 										</button>
 									</div>
 								)}
@@ -417,19 +432,29 @@ function App() {
 									highlights={highlights.get(activeDoc.id) ?? []}
 									scrollToHlId={scrollToHl}
 									onScrollToHlDone={() => setScrollToHl(null)}
-									onAddHighlight={(text, color) => handleAddHighlight(activeDoc.id, text, color)}
-									onRemoveHighlight={(hlId) => handleRemoveHighlight(activeDoc.id, hlId)}
-									onClearHighlights={() => handleClearDocHighlights(activeDoc.id)}
+									onAddHighlight={(text, color) =>
+										handleAddHighlight(activeDoc.id, text, color)
+									}
+									onClearHighlights={() =>
+										handleClearDocHighlights(activeDoc.id)
+									}
 								/>
 							)}
 						</div>
 
 						{/* 右分割线 */}
-						{!layout.rightCollapsed && <Divider {...layout.rightDividerProps} />}
+						{!layout.rightCollapsed && (
+							<Divider {...layout.rightDividerProps} />
+						)}
 
 						{/* 右栏 */}
 						{layout.rightCollapsed ? (
-							!layout.focused && <CollapsedHandle direction="right" onClick={layout.toggleRight} />
+							!layout.focused && (
+								<CollapsedHandle
+									direction="right"
+									onClick={layout.toggleRight}
+								/>
+							)
 						) : (
 							<div
 								style={{ width: layout.rightWidth }}

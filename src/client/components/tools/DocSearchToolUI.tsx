@@ -1,7 +1,4 @@
-import {
-	makeAssistantToolUI,
-	useToolArgsStatus,
-} from "@assistant-ui/react";
+import { makeAssistantToolUI, useToolArgsStatus } from "@assistant-ui/react";
 import { BookOpen, Loader2, Search, Sparkles, X } from "lucide-react";
 import { type FC, useState } from "react";
 
@@ -10,64 +7,63 @@ import { type FC, useState } from "react";
 type SuggestArgs = { queries?: string[]; defaultTopK?: number };
 type SuggestResult = { action: string; query?: string; topK?: number };
 
-export const DocSuggestToolUI = makeAssistantToolUI<
-	SuggestArgs,
-	SuggestResult
->({
-	toolName: "doc_suggest",
-	render: ({ args, result, addResult, status }) => {
-		const { propStatus } = useToolArgsStatus<SuggestArgs>();
+export const DocSuggestToolUI = makeAssistantToolUI<SuggestArgs, SuggestResult>(
+	{
+		toolName: "doc_suggest",
+		render: ({ args, result, addResult }) => {
+			const { propStatus } = useToolArgsStatus<SuggestArgs>();
 
-		// Already resolved — compact confirmation
-		if (result) {
-			if (result.action === "skip") {
+			// Already resolved — compact confirmation
+			if (result) {
+				if (result.action === "skip") {
+					return (
+						<div className="mb-3 flex items-center gap-2 text-xs text-zinc-500">
+							<X className="w-3.5 h-3.5" />
+							已跳过确认，由 AI 自主检索
+						</div>
+					);
+				}
+				if (result.action === "auto") {
+					return (
+						<div className="mb-3 flex items-center gap-2 text-xs text-blue-500 dark:text-blue-400">
+							<Sparkles className="w-3.5 h-3.5" />
+							已委托 AI 选择最佳查询
+						</div>
+					);
+				}
 				return (
-					<div className="mb-3 flex items-center gap-2 text-xs text-zinc-500">
-						<X className="w-3.5 h-3.5" />
-						已跳过确认，由 AI 自主检索
+					<div className="mb-3 flex items-center gap-2 text-xs text-emerald-600 dark:text-emerald-400">
+						<Search className="w-3.5 h-3.5" />
+						已确认检索：{result.query}（{result.topK} 条）
 					</div>
 				);
 			}
-			if (result.action === "auto") {
+
+			const queries = args?.queries ?? [];
+			const queriesStreaming = propStatus.queries === "streaming";
+
+			// Show card as soon as any query appears (streaming or complete)
+			if (queries.length > 0) {
 				return (
-					<div className="mb-3 flex items-center gap-2 text-xs text-blue-500 dark:text-blue-400">
-						<Sparkles className="w-3.5 h-3.5" />
-						已委托 AI 选择最佳查询
-					</div>
+					<SearchCard
+						queries={queries}
+						queriesStreaming={queriesStreaming}
+						defaultTopK={args?.defaultTopK ?? 5}
+						addResult={addResult}
+					/>
 				);
 			}
+
+			// Still waiting for first query
 			return (
-				<div className="mb-3 flex items-center gap-2 text-xs text-emerald-600 dark:text-emerald-400">
-					<Search className="w-3.5 h-3.5" />
-					已确认检索：{result.query}（{result.topK} 条）
+				<div className="mb-3 flex items-center gap-2 text-xs text-blue-500 dark:text-blue-400">
+					<Loader2 className="w-3.5 h-3.5 animate-spin" />
+					正在生成检索建议...
 				</div>
 			);
-		}
-
-		const queries = args?.queries ?? [];
-		const queriesStreaming = propStatus.queries === "streaming";
-
-		// Show card as soon as any query appears (streaming or complete)
-		if (queries.length > 0) {
-			return (
-				<SearchCard
-					queries={queries}
-					queriesStreaming={queriesStreaming}
-					defaultTopK={args?.defaultTopK ?? 5}
-					addResult={addResult}
-				/>
-			);
-		}
-
-		// Still waiting for first query
-		return (
-			<div className="mb-3 flex items-center gap-2 text-xs text-blue-500 dark:text-blue-400">
-				<Loader2 className="w-3.5 h-3.5 animate-spin" />
-				正在生成检索建议...
-			</div>
-		);
+		},
 	},
-});
+);
 
 // ── Search Card ─────────────────────────────────────────────────────────────
 
@@ -107,7 +103,7 @@ const SearchCard: FC<{
 				</div>
 				{queries.map((q, i) => (
 					<button
-						key={`q-${i}`}
+						key={q}
 						type="button"
 						onClick={() => setSelected(i)}
 						className={`w-full text-left px-3 py-2.5 rounded-xl text-sm transition cursor-pointer border ${
@@ -187,7 +183,7 @@ const SearchCard: FC<{
 							onClick={() =>
 								addResult({
 									action: "confirm",
-									query: activeQuery!,
+									query: activeQuery as string,
 									topK,
 									message: `用户确认使用查询「${activeQuery}」检索 ${topK} 条结果。请调用 doc_search。`,
 								} as SuggestResult)
@@ -206,8 +202,7 @@ const SearchCard: FC<{
 							onClick={() =>
 								addResult({
 									action: "skip",
-									message:
-										"用户不想被确认，请直接执行 doc_search。",
+									message: "用户不想被确认，请直接执行 doc_search。",
 								} as SuggestResult)
 							}
 							className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium text-zinc-400 dark:text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition cursor-pointer"
@@ -246,7 +241,9 @@ export const DocSearchToolUI = makeAssistantToolUI<SearchArgs, SearchResult>({
 		if (!result) return null;
 		const hasContext = !!result.context && result.context !== "未找到相关内容";
 		const scope =
-			result.searchedDocuments && result.totalDocuments && result.searchedDocuments < result.totalDocuments
+			result.searchedDocuments &&
+			result.totalDocuments &&
+			result.searchedDocuments < result.totalDocuments
 				? `${result.searchedDocuments} 份指定文档`
 				: `${result.totalDocuments ?? 0} 份文档`;
 		return (

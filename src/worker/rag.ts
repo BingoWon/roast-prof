@@ -214,7 +214,11 @@ export async function ingestFile(
 
 	// Dedup check
 	const [existing] = await db
-		.select({ id: documents.id, status: documents.status, lang: documents.lang })
+		.select({
+			id: documents.id,
+			status: documents.status,
+			lang: documents.lang,
+		})
 		.from(documents)
 		.where(eq(documents.hash, hash))
 		.limit(1);
@@ -267,7 +271,10 @@ export async function ingestFile(
 	);
 	const markdownR2Key = `docs/${hash}.md`;
 	await opts.r2.put(markdownR2Key, markdown);
-	await db.update(documents).set({ markdownR2Key }).where(eq(documents.id, docId));
+	await db
+		.update(documents)
+		.set({ markdownR2Key })
+		.where(eq(documents.id, docId));
 
 	// Detect language
 	const lang = isChinese(markdown) ? "zh" : "en";
@@ -395,7 +402,9 @@ export async function renameUserDocument(
 	await db
 		.update(userDocuments)
 		.set({ title })
-		.where(and(eq(userDocuments.userId, userId), eq(userDocuments.docId, docId)));
+		.where(
+			and(eq(userDocuments.userId, userId), eq(userDocuments.docId, docId)),
+		);
 }
 
 export async function unlinkUserDocument(
@@ -405,7 +414,9 @@ export async function unlinkUserDocument(
 ) {
 	await db
 		.delete(userDocuments)
-		.where(and(eq(userDocuments.userId, userId), eq(userDocuments.docId, docId)));
+		.where(
+			and(eq(userDocuments.userId, userId), eq(userDocuments.docId, docId)),
+		);
 }
 
 export async function isUserLinked(
@@ -416,7 +427,9 @@ export async function isUserLinked(
 	const [row] = await db
 		.select({ docId: userDocuments.docId })
 		.from(userDocuments)
-		.where(and(eq(userDocuments.userId, userId), eq(userDocuments.docId, docId)))
+		.where(
+			and(eq(userDocuments.userId, userId), eq(userDocuments.docId, docId)),
+		)
 		.limit(1);
 	return !!row;
 }

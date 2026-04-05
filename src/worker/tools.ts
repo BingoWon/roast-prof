@@ -93,11 +93,7 @@ export function createMemoryTool(opts: {
 				}),
 			),
 			execute: async ({ content }) => {
-				await addMemories(
-					opts.env,
-					[{ role: "user", content }],
-					opts.userId,
-				);
+				await addMemories(opts.env, [{ role: "user", content }], opts.userId);
 				// Mem0 processes memories asynchronously
 				return { success: true, message: "已提交到记忆系统" };
 			},
@@ -118,10 +114,7 @@ export const hitlTools = {
 						z.object({
 							label: z.string().describe("选项显示文本"),
 							value: z.string().describe("选项值，返回给模型"),
-							description: z
-								.string()
-								.optional()
-								.describe("选项的补充说明"),
+							description: z.string().optional().describe("选项的补充说明"),
 						}),
 					)
 					.min(2)
@@ -133,10 +126,7 @@ export const hitlTools = {
 					.optional()
 					.default(true)
 					.describe("是否允许用户在选项之外自定义输入，默认允许"),
-				placeholder: z
-					.string()
-					.optional()
-					.describe("自定义输入框的占位文本"),
+				placeholder: z.string().optional().describe("自定义输入框的占位文本"),
 			}),
 		),
 		// No execute — blocks until frontend calls addToolResult
@@ -169,7 +159,12 @@ export function createExaTools(opts: { env: { EXA_API_KEY: string } }) {
 /** Create document tools with request-scoped context. */
 export function createDocTools(opts: {
 	docIds: string[];
-	docList: { id: string; title: string; lang?: string | null; fileExt?: string | null }[];
+	docList: {
+		id: string;
+		title: string;
+		lang?: string | null;
+		fileExt?: string | null;
+	}[];
 	db: DbClient;
 	vectorize: VectorizeIndex;
 	env: RagEnv;
@@ -267,19 +262,10 @@ export function createDocTools(opts: {
 						.optional()
 						.describe("要高亮的原文文本片段（精确匹配）。不传则高亮全文"),
 					color: z
-						.enum([
-							"yellow",
-							"red",
-							"green",
-							"blue",
-							"purple",
-							"transparent",
-						])
+						.enum(["yellow", "red", "green", "blue", "purple", "transparent"])
 						.optional()
 						.default("yellow")
-						.describe(
-							"高亮颜色。transparent 用于清除高亮",
-						),
+						.describe("高亮颜色。transparent 用于清除高亮"),
 				}),
 			),
 			execute: async ({ docId, text, color }) => {
@@ -302,9 +288,7 @@ export function createDocTools(opts: {
 				"阅读文档内容。文档以分块（chunk）形式存储，每块约 1500 字符。可以按页阅读（每页默认 10 块），也可以一次读取全部。首次调用时不传参数即可获取文档概览和前 10 块内容，根据 totalChunks 决定是否继续读取。",
 			inputSchema: zodSchema(
 				z.object({
-					docId: z
-						.string()
-						.describe("文档 ID"),
+					docId: z.string().describe("文档 ID"),
 					page: z
 						.number()
 						.int()
@@ -333,7 +317,8 @@ export function createDocTools(opts: {
 					.where(eq(documents.id, docId))
 					.limit(1);
 				const totalChunks = docRow?.totalChunks ?? 0;
-				if (totalChunks === 0) return { error: "该文档尚无内容", title: doc.title };
+				if (totalChunks === 0)
+					return { error: "该文档尚无内容", title: doc.title };
 
 				const offset = (page - 1) * pageSize;
 				const totalPages = Math.ceil(totalChunks / pageSize);

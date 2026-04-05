@@ -2,7 +2,10 @@ import { MarkdownTextPrimitive } from "@assistant-ui/react-markdown";
 import type { FC } from "react";
 
 const markdownComponents = {
-	a: ({ children, ...props }: React.AnchorHTMLAttributes<HTMLAnchorElement>) => (
+	a: ({
+		children,
+		...props
+	}: React.AnchorHTMLAttributes<HTMLAnchorElement>) => (
 		<a {...props} target="_blank" rel="noopener noreferrer">
 			{children}
 		</a>

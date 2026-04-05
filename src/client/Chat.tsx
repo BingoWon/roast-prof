@@ -28,12 +28,12 @@ import {
 	X,
 } from "lucide-react";
 import { createContext, type FC, useEffect } from "react";
+import { ReasoningPart } from "./components/message/ReasoningPart";
+import type { Recipe } from "./components/RecipePanel";
+import { ToolCallFallback } from "./components/tools/ToolCallFallback";
 import { Button } from "./components/ui/button";
 import { MarkdownText } from "./components/ui/markdown-text";
 import { TooltipIconButton } from "./components/ui/tooltip-icon-button";
-import type { Recipe } from "./components/RecipePanel";
-import { ReasoningPart } from "./components/message/ReasoningPart";
-import { ToolCallFallback } from "./components/tools/ToolCallFallback";
 
 // ── Recipe Update Context ────────────────────────────────────────────────────
 
@@ -307,9 +307,7 @@ const AssistantMessage: FC = () => (
 			/>
 			<MessageError />
 			<AuiIf
-				condition={(s) =>
-					s.thread.isRunning && s.message.content.length === 0
-				}
+				condition={(s) => s.thread.isRunning && s.message.content.length === 0}
 			>
 				<div className="flex items-center gap-2 text-zinc-400 dark:text-zinc-500">
 					<Loader2 className="size-4 animate-spin" />
@@ -415,7 +413,12 @@ export function Chat({
 }: {
 	recipe: Recipe;
 	onRecipeUpdate: (partial: Partial<Recipe>) => void;
-	onDocSelect?: (docId: string, title: string, lang?: string | null, fileExt?: string | null) => void;
+	onDocSelect?: (
+		docId: string,
+		title: string,
+		lang?: string | null,
+		fileExt?: string | null,
+	) => void;
 	onHighlight?: (action: HighlightAction) => void;
 	onLoadingChange?: (loading: boolean) => void;
 	registerImprove?: (fn: () => void) => void;
@@ -442,54 +445,54 @@ export function Chat({
 
 	return (
 		<RecipeUpdateCtx value={onRecipeUpdate}>
-		<DocSelectCtx value={onDocSelect ?? null}>
-		<HighlightCtx value={onHighlight ?? null}>
-			<ThreadPrimitive.Root
-				className="flex h-full flex-col text-sm"
-				style={
-					{
-						"--thread-max-width": "44rem",
-					} as React.CSSProperties
-				}
-			>
-				<ThreadPrimitive.Viewport
-					turnAnchor="top"
-					className="relative flex flex-1 flex-col overflow-x-hidden overflow-y-auto scroll-smooth px-4 pt-4"
-				>
-					{/* Existing thread loading → spinner; new thread → welcome */}
-					<AuiIf
-						condition={(s) =>
-							s.thread.isEmpty && !!s.threadListItem.remoteId
+			<DocSelectCtx value={onDocSelect ?? null}>
+				<HighlightCtx value={onHighlight ?? null}>
+					<ThreadPrimitive.Root
+						className="flex h-full flex-col text-sm"
+						style={
+							{
+								"--thread-max-width": "44rem",
+							} as React.CSSProperties
 						}
 					>
-						<div className="flex flex-1 items-center justify-center">
-							<Loader2 className="h-5 w-5 animate-spin text-zinc-300 dark:text-zinc-600" />
-						</div>
-					</AuiIf>
-					<AuiIf
-						condition={(s) =>
-							s.thread.isEmpty && !s.threadListItem.remoteId
-						}
-					>
-						<ThreadWelcome />
-					</AuiIf>
+						<ThreadPrimitive.Viewport
+							turnAnchor="top"
+							className="relative flex flex-1 flex-col overflow-x-hidden overflow-y-auto scroll-smooth px-4 pt-4"
+						>
+							{/* Existing thread loading → spinner; new thread → welcome */}
+							<AuiIf
+								condition={(s) =>
+									s.thread.isEmpty && !!s.threadListItem.remoteId
+								}
+							>
+								<div className="flex flex-1 items-center justify-center">
+									<Loader2 className="h-5 w-5 animate-spin text-zinc-300 dark:text-zinc-600" />
+								</div>
+							</AuiIf>
+							<AuiIf
+								condition={(s) =>
+									s.thread.isEmpty && !s.threadListItem.remoteId
+								}
+							>
+								<ThreadWelcome />
+							</AuiIf>
 
-					<ThreadPrimitive.Messages
-						components={{
-							UserMessage,
-							EditComposer,
-							AssistantMessage,
-						}}
-					/>
+							<ThreadPrimitive.Messages
+								components={{
+									UserMessage,
+									EditComposer,
+									AssistantMessage,
+								}}
+							/>
 
-					<ThreadPrimitive.ViewportFooter className="sticky bottom-0 mx-auto mt-auto flex w-full max-w-[var(--thread-max-width)] flex-col gap-4 overflow-visible rounded-t-3xl bg-gradient-to-t from-white via-white/90 dark:from-zinc-900 dark:via-zinc-900/90 to-transparent pb-4">
-						<ThreadScrollToBottom />
-						<Composer />
-					</ThreadPrimitive.ViewportFooter>
-				</ThreadPrimitive.Viewport>
-			</ThreadPrimitive.Root>
-		</HighlightCtx>
-		</DocSelectCtx>
+							<ThreadPrimitive.ViewportFooter className="sticky bottom-0 mx-auto mt-auto flex w-full max-w-[var(--thread-max-width)] flex-col gap-4 overflow-visible rounded-t-3xl bg-gradient-to-t from-white via-white/90 dark:from-zinc-900 dark:via-zinc-900/90 to-transparent pb-4">
+								<ThreadScrollToBottom />
+								<Composer />
+							</ThreadPrimitive.ViewportFooter>
+						</ThreadPrimitive.Viewport>
+					</ThreadPrimitive.Root>
+				</HighlightCtx>
+			</DocSelectCtx>
 		</RecipeUpdateCtx>
 	);
 }

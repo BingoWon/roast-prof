@@ -4,8 +4,7 @@ import {
 	useAui,
 	useAuiState,
 } from "@assistant-ui/react";
-import { useUser, UserButton } from "@clerk/react";
-import { ThemeToggle } from "./ThemeToggle";
+import { UserButton, useUser } from "@clerk/react";
 import {
 	BookOpen,
 	Brain,
@@ -18,7 +17,6 @@ import {
 	Upload,
 	X,
 } from "lucide-react";
-import { getFileIcon } from "../lib/file-icons";
 import {
 	type FC,
 	type ReactNode,
@@ -27,6 +25,8 @@ import {
 	useRef,
 	useState,
 } from "react";
+import { getFileIcon } from "../lib/file-icons";
+import { ThemeToggle } from "./ThemeToggle";
 
 export type SidebarTab = "chat" | "library" | "memory";
 
@@ -262,10 +262,7 @@ export const ThreadListSidebar: FC<{
 		)}
 
 		{activeTab === "library" && (
-			<DocumentsPanel
-				activeDocId={activeDocId}
-				onDocSelect={onDocSelect}
-			/>
+			<DocumentsPanel activeDocId={activeDocId} onDocSelect={onDocSelect} />
 		)}
 
 		{activeTab === "memory" && <MemoryPanel />}
@@ -281,11 +278,12 @@ const SidebarUserSection: FC = () => {
 	const { user } = useUser();
 	return (
 		<div className="flex items-center gap-3 px-3 py-3 border-t border-divider dark:border-divider-dark shrink-0">
-			<UserButton
-				appearance={{ elements: { avatarBox: "h-7 w-7" } }}
-			/>
+			<UserButton appearance={{ elements: { avatarBox: "h-7 w-7" } }} />
 			<span className="flex-1 truncate text-sm font-medium text-zinc-700 dark:text-zinc-300">
-				{user?.fullName || user?.username || user?.primaryEmailAddress?.emailAddress || ""}
+				{user?.fullName ||
+					user?.username ||
+					user?.primaryEmailAddress?.emailAddress ||
+					""}
 			</span>
 			<ThemeToggle />
 		</div>
@@ -330,26 +328,25 @@ const RuntimeThreadItem: FC = () => {
 				</span>
 			</div>
 			<div className="relative z-10 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition shrink-0">
-				<span
-					role="button"
+				<button
+					type="button"
 					tabIndex={-1}
 					onClick={(e) => {
 						e.stopPropagation();
 						setEditing(true);
 					}}
-					onKeyDown={() => {}}
 					className="p-1 text-zinc-400 hover:text-blue-500 transition cursor-pointer pointer-events-auto"
 				>
 					<Pencil className="w-3 h-3" />
-				</span>
+				</button>
 				<ThreadListItemPrimitive.Delete asChild>
-					<span
-						role="button"
+					<button
+						type="button"
 						tabIndex={-1}
 						className="p-1 text-zinc-400 hover:text-red-500 transition cursor-pointer pointer-events-auto"
 					>
 						<Trash2 className="w-3 h-3" />
-					</span>
+					</button>
 				</ThreadListItemPrimitive.Delete>
 			</div>
 		</ThreadListItemPrimitive.Root>
@@ -398,7 +395,10 @@ const MemoryPanel: FC = () => {
 	// Initial fetch + polling
 	useEffect(() => {
 		fetchMemories();
-		const interval = setInterval(() => fetchMemories(false), MEMORY_POLL_INTERVAL);
+		const interval = setInterval(
+			() => fetchMemories(false),
+			MEMORY_POLL_INTERVAL,
+		);
 		return () => clearInterval(interval);
 	}, [fetchMemories]);
 
@@ -521,7 +521,6 @@ const MemoryListItem: FC<{
 
 	return (
 		// biome-ignore lint/a11y/noStaticElementInteractions: list item
-		// biome-ignore lint/a11y/useKeyWithClickEvents: list item
 		<div
 			className={`${ITEM_BASE} items-start`}
 			onDoubleClick={() => setEditing(true)}
@@ -562,7 +561,6 @@ interface LibraryDoc {
 }
 
 const PLACEHOLDER_TITLE = "等待解析后自动生成标题…";
-
 
 const DocumentsPanel: FC<{
 	activeDocId: string | null;
@@ -621,33 +619,61 @@ const DocumentsPanel: FC<{
 	);
 
 	const handleUpload = async (file: File) => {
-		const SUPPORTED = [".pdf", ".png", ".jpg", ".jpeg", ".webp", ".txt", ".md", ".docx"];
+		const SUPPORTED = [
+			".pdf",
+			".png",
+			".jpg",
+			".jpeg",
+			".webp",
+			".txt",
+			".md",
+			".docx",
+		];
 		if (!SUPPORTED.some((e) => file.name.toLowerCase().endsWith(e))) return;
 
 		const buffer = await file.arrayBuffer();
 		const digest = await crypto.subtle.digest("SHA-256", buffer);
-		const hash = [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
+		const hash = [...new Uint8Array(digest)]
+			.map((b) => b.toString(16).padStart(2, "0"))
+			.join("");
 
 		try {
-			const checkRes = await fetch(`/api/documents/check?hash=${encodeURIComponent(hash)}`);
+			const checkRes = await fetch(
+				`/api/documents/check?hash=${encodeURIComponent(hash)}`,
+			);
 			if (checkRes.ok) {
 				const check = (await checkRes.json()) as { exists: boolean };
-				if (check.exists) { await fetchDocs(); return; }
+				if (check.exists) {
+					await fetchDocs();
+					return;
+				}
 			}
-		} catch { /* proceed */ }
+		} catch {
+			/* proceed */
+		}
 
 		const tempId = crypto.randomUUID() as string;
-		setDocs((prev) => [{
-			id: tempId, title: PLACEHOLDER_TITLE, chunks: 0, status: "uploading",
-			fileExt: file.name.split(".").pop()?.toLowerCase(), createdAt: Math.floor(Date.now() / 1000),
-		}, ...prev]);
+		setDocs((prev) => [
+			{
+				id: tempId,
+				title: PLACEHOLDER_TITLE,
+				chunks: 0,
+				status: "uploading",
+				fileExt: file.name.split(".").pop()?.toLowerCase(),
+				createdAt: Math.floor(Date.now() / 1000),
+			},
+			...prev,
+		]);
 
 		const form = new FormData();
 		form.append("file", file);
 
 		try {
 			const res = await fetch("/api/documents", { method: "POST", body: form });
-			if (!res.ok || !res.body) { updateDocStatus(tempId, "failed"); return; }
+			if (!res.ok || !res.body) {
+				updateDocStatus(tempId, "failed");
+				return;
+			}
 
 			const reader = res.body.getReader();
 			const decoder = new TextDecoder();
@@ -665,31 +691,61 @@ const DocumentsPanel: FC<{
 					if (!line.startsWith("data: ")) continue;
 					try {
 						const data = JSON.parse(line.slice(6)) as {
-							status: string; docId?: string; chunks?: number;
-							lang?: string; fileName?: string; duplicate?: boolean;
+							status: string;
+							docId?: string;
+							chunks?: number;
+							lang?: string;
+							fileName?: string;
+							duplicate?: boolean;
 						};
 						if (data.docId && realDocId === tempId) {
 							realDocId = data.docId;
-							setDocs((prev) => prev.map((p) => p.id === tempId ? { ...p, id: realDocId } : p));
+							setDocs((prev) =>
+								prev.map((p) =>
+									p.id === tempId ? { ...p, id: realDocId } : p,
+								),
+							);
 						}
-						if (data.duplicate) { setDocs((prev) => prev.filter((p) => p.id !== realDocId)); await fetchDocs(); return; }
-						updateDocStatus(realDocId, data.status, { chunks: data.chunks ?? 0, lang: data.lang });
+						if (data.duplicate) {
+							setDocs((prev) => prev.filter((p) => p.id !== realDocId));
+							await fetchDocs();
+							return;
+						}
+						updateDocStatus(realDocId, data.status, {
+							chunks: data.chunks ?? 0,
+							lang: data.lang,
+						});
 						if (data.status === "ready") {
 							try {
-								const titleRes = await fetch(`/api/documents/${realDocId}/generate-title`, {
-									method: "POST", headers: { "Content-Type": "application/json" },
-									body: JSON.stringify({ fileName: data.fileName, fileExt: file.name.split(".").pop()?.toLowerCase() }),
-								});
+								const titleRes = await fetch(
+									`/api/documents/${realDocId}/generate-title`,
+									{
+										method: "POST",
+										headers: { "Content-Type": "application/json" },
+										body: JSON.stringify({
+											fileName: data.fileName,
+											fileExt: file.name.split(".").pop()?.toLowerCase(),
+										}),
+									},
+								);
 								if (titleRes.ok) {
-									const { title } = (await titleRes.json()) as { title: string };
+									const { title } = (await titleRes.json()) as {
+										title: string;
+									};
 									if (title) updateDocStatus(realDocId, "ready", { title });
 								}
-							} catch { /* best-effort */ }
+							} catch {
+								/* best-effort */
+							}
 						}
-					} catch { /* skip */ }
+					} catch {
+						/* skip */
+					}
 				}
 			}
-		} catch { updateDocStatus(tempId, "failed"); }
+		} catch {
+			updateDocStatus(tempId, "failed");
+		}
 	};
 
 	const handleUnlink = async (id: string, e: React.MouseEvent) => {
@@ -714,27 +770,52 @@ const DocumentsPanel: FC<{
 	const showLoader = loading && docs.length === 0;
 
 	return (
-		// biome-ignore lint/a11y/useKeyWithClickEvents: drop zone
 		// biome-ignore lint/a11y/noStaticElementInteractions: drop zone
 		<div
 			ref={panelRef}
 			// biome-ignore lint/a11y/noNoninteractiveTabindex: paste target
 			tabIndex={0}
 			className={`flex-1 flex flex-col overflow-hidden transition-colors outline-none ${dragOver ? "bg-blue-50 dark:bg-blue-900/10" : ""}`}
-			onDrop={(e) => { e.preventDefault(); setDragOver(false); const f = e.dataTransfer.files[0]; if (f) handleUpload(f); }}
-			onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
-			onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragOver(false); }}
+			onDrop={(e) => {
+				e.preventDefault();
+				setDragOver(false);
+				const f = e.dataTransfer.files[0];
+				if (f) handleUpload(f);
+			}}
+			onDragOver={(e) => {
+				e.preventDefault();
+				setDragOver(true);
+			}}
+			onDragLeave={(e) => {
+				if (!e.currentTarget.contains(e.relatedTarget as Node))
+					setDragOver(false);
+			}}
 		>
-			{/* biome-ignore lint/a11y/useKeyWithClickEvents: upload click */}
-			<div className={`m-3 p-4 rounded-xl border-2 border-dashed transition-all flex flex-col items-center gap-2 cursor-pointer ${dragOver ? "border-blue-400 bg-blue-50 dark:bg-blue-900/20" : "border-zinc-300 dark:border-zinc-700 hover:border-zinc-400 dark:hover:border-zinc-600"}`}
-				onClick={() => fileRef.current?.click()}>
+			<button
+				type="button"
+				className={`m-3 p-4 rounded-xl border-2 border-dashed transition-all flex flex-col items-center gap-2 cursor-pointer ${dragOver ? "border-blue-400 bg-blue-50 dark:bg-blue-900/20" : "border-zinc-300 dark:border-zinc-700 hover:border-zinc-400 dark:hover:border-zinc-600"}`}
+				onClick={() => fileRef.current?.click()}
+			>
 				<Upload className="w-5 h-5 text-zinc-400" />
-				<span className="text-xs text-zinc-500 dark:text-zinc-400">拖拽、点击或粘贴上传</span>
-				<span className="text-[10px] text-zinc-400 dark:text-zinc-600">PDF · 图片 · TXT · MD · DOCX</span>
-			</div>
+				<span className="text-xs text-zinc-500 dark:text-zinc-400">
+					拖拽、点击或粘贴上传
+				</span>
+				<span className="text-[10px] text-zinc-400 dark:text-zinc-600">
+					PDF · 图片 · TXT · MD · DOCX
+				</span>
+			</button>
 
-			<input ref={fileRef} type="file" accept=".pdf,.png,.jpg,.jpeg,.webp,.txt,.md,.docx" className="hidden"
-				onChange={(e) => { const f = e.target.files?.[0]; if (f) handleUpload(f); e.target.value = ""; }} />
+			<input
+				ref={fileRef}
+				type="file"
+				accept=".pdf,.png,.jpg,.jpeg,.webp,.txt,.md,.docx"
+				className="hidden"
+				onChange={(e) => {
+					const f = e.target.files?.[0];
+					if (f) handleUpload(f);
+					e.target.value = "";
+				}}
+			/>
 
 			<div className="flex-1 overflow-y-auto px-2 pb-4 flex flex-col gap-1 pointer-events-auto">
 				{showLoader && <CenteredLoader />}
@@ -746,9 +827,17 @@ const DocumentsPanel: FC<{
 					/>
 				)}
 				{docs.map((p) => (
-					<DocListItem key={p.id} doc={p} isActive={p.id === activeDocId}
-						onClick={() => { if (p.status === "ready") onDocSelect?.(p.id, p.title, p.lang, p.fileExt); }}
-						onUnlink={(e) => handleUnlink(p.id, e)} onRename={(title) => handleRename(p.id, title)} />
+					<DocListItem
+						key={p.id}
+						doc={p}
+						isActive={p.id === activeDocId}
+						onClick={() => {
+							if (p.status === "ready")
+								onDocSelect?.(p.id, p.title, p.lang, p.fileExt);
+						}}
+						onUnlink={(e) => handleUnlink(p.id, e)}
+						onRename={(title) => handleRename(p.id, title)}
+					/>
 				))}
 			</div>
 		</div>
@@ -758,7 +847,13 @@ const DocumentsPanel: FC<{
 // ── Progress Bar ────────────────────────────────────────────────────────────
 
 const STEPS = ["上传", "解析", "翻译", "分块", "嵌入"];
-const STATUS_TO_STEP: Record<string, number> = { uploading: 0, parsing: 1, translating: 2, chunking: 3, embedding: 4 };
+const STATUS_TO_STEP: Record<string, number> = {
+	uploading: 0,
+	parsing: 1,
+	translating: 2,
+	chunking: 3,
+	embedding: 4,
+};
 
 const ProgressBar: FC<{ status: string }> = ({ status }) => {
 	const active = STATUS_TO_STEP[status] ?? -1;
@@ -766,12 +861,21 @@ const ProgressBar: FC<{ status: string }> = ({ status }) => {
 		const done = i < active;
 		const current = i === active;
 		const stepEl = (
-			<span key={label} className={`text-[10px] whitespace-nowrap ${done ? "text-emerald-500 dark:text-emerald-400" : current ? "text-blue-500 dark:text-blue-400 font-semibold" : "text-zinc-300 dark:text-zinc-700"}`}>
+			<span
+				key={label}
+				className={`text-[10px] whitespace-nowrap ${done ? "text-emerald-500 dark:text-emerald-400" : current ? "text-blue-500 dark:text-blue-400 font-semibold" : "text-zinc-300 dark:text-zinc-700"}`}
+			>
 				{done ? "✓" : current ? "●" : "○"} {label}
 			</span>
 		);
 		if (i === 0) return [stepEl];
-		return [<div key={`line-${label}`} className={`flex-1 h-px mx-1 ${done ? "bg-emerald-400" : "bg-zinc-200 dark:bg-zinc-800"}`} />, stepEl];
+		return [
+			<div
+				key={`line-${label}`}
+				className={`flex-1 h-px mx-1 ${done ? "bg-emerald-400" : "bg-zinc-200 dark:bg-zinc-800"}`}
+			/>,
+			stepEl,
+		];
 	});
 	return <div className="flex items-center mt-1 w-full">{items}</div>;
 };
@@ -779,17 +883,32 @@ const ProgressBar: FC<{ status: string }> = ({ status }) => {
 // ── Document List Item ─────────────────────────────────────────────────────────
 
 const DocListItem: FC<{
-	doc: LibraryDoc; isActive: boolean; onClick: () => void;
-	onUnlink: (e: React.MouseEvent) => void; onRename: (title: string) => void;
+	doc: LibraryDoc;
+	isActive: boolean;
+	onClick: () => void;
+	onUnlink: (e: React.MouseEvent) => void;
+	onRename: (title: string) => void;
 }> = ({ doc: p, isActive, onClick, onUnlink, onRename }) => {
 	const [editing, setEditing] = useState(false);
 	const FileIcon = getFileIcon(p.fileExt);
-	const icon = p.status === "ready" ? <FileIcon className="w-4 h-4" />
-		: p.status === "failed" ? <FileIcon className="w-4 h-4 text-red-400" />
-		: <Loader2 className="w-4 h-4 text-blue-400 animate-spin" />;
+	const icon =
+		p.status === "ready" ? (
+			<FileIcon className="w-4 h-4" />
+		) : p.status === "failed" ? (
+			<FileIcon className="w-4 h-4 text-red-400" />
+		) : (
+			<Loader2 className="w-4 h-4 text-blue-400 animate-spin" />
+		);
 
 	if (editing) {
-		return <InlineEdit icon={icon} value={p.title} onSave={onRename} onCancel={() => setEditing(false)} />;
+		return (
+			<InlineEdit
+				icon={icon}
+				value={p.title}
+				onSave={onRename}
+				onCancel={() => setEditing(false)}
+			/>
+		);
 	}
 
 	const isReady = p.status === "ready";
@@ -798,7 +917,10 @@ const DocListItem: FC<{
 		// biome-ignore lint/a11y/useKeyWithClickEvents: document click
 		// biome-ignore lint/a11y/noStaticElementInteractions: document click
 		<div
-			onClick={(e) => { e.stopPropagation(); onClick(); }}
+			onClick={(e) => {
+				e.stopPropagation();
+				onClick();
+			}}
 			onDoubleClick={() => isReady && setEditing(true)}
 			className={`${ITEM_BASE} ${!isReady ? (p.status === "failed" ? "opacity-50 text-zinc-500" : "text-zinc-500 dark:text-zinc-400") : isActive ? ITEM_ACTIVE : ITEM_IDLE}`}
 		>
@@ -822,7 +944,10 @@ const DocListItem: FC<{
 					)}
 				</div>
 			</div>
-			<ItemActions onEdit={isReady ? () => setEditing(true) : undefined} onRemove={onUnlink} />
+			<ItemActions
+				onEdit={isReady ? () => setEditing(true) : undefined}
+				onRemove={onUnlink}
+			/>
 		</div>
 	);
 };

@@ -255,7 +255,9 @@ app.get("/api/documents/:id/download", async (c) => {
 		})
 		.from(userDocuments)
 		.innerJoin(documents, eq(documents.id, userDocuments.docId))
-		.where(and(eq(userDocuments.userId, userId), eq(userDocuments.docId, docId)))
+		.where(
+			and(eq(userDocuments.userId, userId), eq(userDocuments.docId, docId)),
+		)
 		.limit(1);
 	if (!row) return c.json({ error: "未找到" }, 404);
 
@@ -359,16 +361,14 @@ async function generateLLMTitle(env: Env, prompt: string): Promise<string> {
 app.get("/api/memories", async (c) => {
 	const userId = await requireUserId(c);
 	if (!userId) return c.json({ error: "未授权" }, 401);
-	if (!c.env.MEM0_API_KEY)
-		return c.json({ error: "记忆服务未配置" }, 503);
+	if (!c.env.MEM0_API_KEY) return c.json({ error: "记忆服务未配置" }, 503);
 	return c.json(await listMemories(c.env, userId));
 });
 
 app.post("/api/memories", async (c) => {
 	const userId = await requireUserId(c);
 	if (!userId) return c.json({ error: "未授权" }, 401);
-	if (!c.env.MEM0_API_KEY)
-		return c.json({ error: "记忆服务未配置" }, 503);
+	if (!c.env.MEM0_API_KEY) return c.json({ error: "记忆服务未配置" }, 503);
 	const { text } = await c.req.json<{ text: string }>();
 	if (!text?.trim()) return c.json({ error: "内容不能为空" }, 400);
 	const result = await addMemories(
@@ -480,11 +480,13 @@ app.post("/api/chat", async (c) => {
 					generateLLMTitle(
 						c.env,
 						`为以下用户消息生成简洁中文标题，4-8个字，无标点无引号，只回复标题：\n${firstText}`,
-					).then(async (title) => {
-						if (title) {
-							await updateThreadTitle(db, threadId, userId, title);
-						}
-					}).catch(() => {}),
+					)
+						.then(async (title) => {
+							if (title) {
+								await updateThreadTitle(db, threadId, userId, title);
+							}
+						})
+						.catch(() => {}),
 				);
 			}
 		}
@@ -510,14 +512,16 @@ app.post("/api/chat", async (c) => {
 		}
 
 		// ── Build system prompt ──────────────────────────────────────────────
-		let systemPrompt = SYSTEM_PROMPT + formatMemoriesForPrompt(retrievedMemories);
+		let systemPrompt =
+			SYSTEM_PROMPT + formatMemoriesForPrompt(retrievedMemories);
 		if (docList.length > 0) {
 			const readyDocs = docList.filter((d) => d.status === "ready");
 			if (readyDocs.length > 0) {
 				const activeDocId = c.req.header("x-active-doc") || undefined;
 				const docListStr = readyDocs
 					.map((d) => {
-						const active = d.id === activeDocId ? " ← 当前打开" : "";
+						const active =
+							d.id === activeDocId ? " ← 用户当前激活打开的就是这个文档" : "";
 						return `- ID: ${d.id}  标题:「${d.title}」 分块数：${d.chunks}${active}`;
 					})
 					.join("\n");
@@ -562,8 +566,7 @@ app.post("/api/chat", async (c) => {
 					c.env,
 					messages
 						.filter(
-							(m: WireMessage) =>
-								m.role === "user" || m.role === "assistant",
+							(m: WireMessage) => m.role === "user" || m.role === "assistant",
 						)
 						.slice(-6)
 						.map((m: WireMessage) => ({
@@ -607,7 +610,13 @@ app.post("/api/chat", async (c) => {
 					model: wrappedModel,
 					system: systemPrompt,
 					messages: modelMessages,
-					tools: { ...staticTools, ...hitlTools, ...exaTools, ...memoryTools, ...docTools },
+					tools: {
+						...staticTools,
+						...hitlTools,
+						...exaTools,
+						...memoryTools,
+						...docTools,
+					},
 					stopWhen: stepCountIs(5),
 					...(isHitlContinuation && {
 						providerOptions: {

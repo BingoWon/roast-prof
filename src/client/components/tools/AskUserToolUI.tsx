@@ -1,7 +1,4 @@
-import {
-	makeAssistantToolUI,
-	useToolArgsStatus,
-} from "@assistant-ui/react";
+import { makeAssistantToolUI, useToolArgsStatus } from "@assistant-ui/react";
 import { Check, MessageCircleQuestion, Send } from "lucide-react";
 import { useState } from "react";
 
@@ -25,7 +22,7 @@ type Result = {
 
 export const AskUserToolUI = makeAssistantToolUI<Args, Result>({
 	toolName: "ask_user",
-	render: ({ args, result, addResult, status }) => {
+	render: ({ args, result, addResult }) => {
 		const { propStatus } = useToolArgsStatus<Args>();
 
 		// Already answered — compact confirmation
@@ -113,7 +110,7 @@ function AskUserCard({
 				</div>
 				{options.map((opt, i) => (
 					<button
-						key={`opt-${i}`}
+						key={opt.value}
 						type="button"
 						onClick={() => {
 							setSelected(i);
