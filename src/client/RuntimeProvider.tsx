@@ -107,7 +107,7 @@ const threadListAdapter: RemoteThreadListAdapter = {
 		return { remoteId, status: "regular" as const };
 	},
 
-	async generateTitle(_remoteId, messages) {
+	async generateTitle(remoteId, messages) {
 		return createAssistantStream(async (controller) => {
 			const firstUser = messages.find((m) => m.role === "user");
 			const text =
@@ -117,9 +117,31 @@ const threadListAdapter: RemoteThreadListAdapter = {
 					)
 					.map((c) => c.text)
 					.join(" ") ?? "";
-			controller.appendText(
-				text ? text.slice(0, 30) + (text.length > 30 ? "…" : "") : "新对话",
-			);
+
+			if (!text) {
+				controller.appendText("新对话");
+				return;
+			}
+
+			// Call server to generate + persist LLM title in one step
+			try {
+				const res = await fetch(
+					`/api/threads/${remoteId}/generate-title`,
+					{
+						method: "POST",
+						headers: { "Content-Type": "application/json" },
+						body: JSON.stringify({ text: text.slice(0, 200) }),
+					},
+				);
+				if (res.ok) {
+					const { title } = (await res.json()) as { title: string };
+					controller.appendText(title || text.slice(0, 30));
+				} else {
+					controller.appendText(text.slice(0, 30));
+				}
+			} catch {
+				controller.appendText(text.slice(0, 30));
+			}
 		});
 	},
 
@@ -184,9 +206,7 @@ function useMyRuntime() {
 		}
 	}, [loadedMessages, chat.setMessages]);
 
-	return useAISDKRuntime(chat, {
-		adapters: { attachments: attachmentAdapter },
-	});
+	return useAISDKRuntime(chat);
 }
 
 // ── Root Provider ───────────────────────────────────────────────────────────
