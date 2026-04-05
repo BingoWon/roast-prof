@@ -13,7 +13,14 @@ import {
 	lastAssistantMessageIsCompleteWithToolCalls,
 } from "ai";
 import { createAssistantStream } from "assistant-stream";
-import { type FC, type ReactNode, useEffect, useMemo, useState } from "react";
+import {
+	type FC,
+	type ReactNode,
+	useEffect,
+	useMemo,
+	useRef,
+	useState,
+} from "react";
 
 // ── Attachment Adapter ──────────────────────────────────────────────────────
 
@@ -75,8 +82,10 @@ const threadListAdapter: RemoteThreadListAdapter = {
 		};
 	},
 
-	async initialize(localId) {
-		return { remoteId: localId, externalId: undefined };
+	async initialize() {
+		// Generate a proper UUID as remoteId (server creates via ensureThread)
+		const remoteId = crypto.randomUUID();
+		return { remoteId, externalId: undefined };
 	},
 
 	async rename(remoteId, title) {
@@ -160,15 +169,17 @@ function ThreadAdapterProvider({ children }: { children: ReactNode }) {
 
 function useMyRuntime() {
 	const aui = useAui();
-	const state = aui.threadListItem().getState();
-	const threadId = state.remoteId ?? state.id;
+	const stateRef = useRef(aui.threadListItem().getState());
+	stateRef.current = aui.threadListItem().getState();
+
+	const remoteId = stateRef.current.remoteId;
 
 	// Fetch messages for existing threads
 	const [loadedMessages, setLoadedMessages] = useState<UIMessage[]>([]);
 	useEffect(() => {
-		if (!state.remoteId) return;
+		if (!remoteId) return;
 		let cancelled = false;
-		fetch(`/api/threads/${state.remoteId}/messages`)
+		fetch(`/api/threads/${remoteId}/messages`)
 			.then((r) => (r.ok ? r.json() : []))
 			.then((msgs) => {
 				if (!cancelled) setLoadedMessages(msgs as UIMessage[]);
@@ -177,19 +188,22 @@ function useMyRuntime() {
 		return () => {
 			cancelled = true;
 		};
-	}, [state.remoteId]);
+	}, [remoteId]);
 
+	// Dynamic header: reads remoteId at send time (after initialize())
 	const transport = useMemo(
 		() =>
 			new DefaultChatTransport({
 				api: "/api/chat",
-				headers: { "x-thread-id": threadId },
+				headers: () => ({
+					"x-thread-id": stateRef.current.remoteId ?? stateRef.current.id,
+				}),
 			}),
-		[threadId],
+		[],
 	);
 
 	const chat = useChat({
-		id: threadId,
+		id: remoteId ?? stateRef.current.id,
 		transport,
 		sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithToolCalls,
 	});
