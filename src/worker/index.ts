@@ -521,7 +521,7 @@ app.post("/api/chat", async (c) => {
 				const docListStr = readyDocs
 					.map((d) => {
 						const active =
-							d.id === activeDocId ? " ← 用户当前激活打开的就是这个文档" : "";
+							d.id === activeDocId ? " ← 用户当前激活已打开的就是这个文档" : "";
 						return `- ID: ${d.id}  标题:「${d.title}」 分块数：${d.chunks}${active}`;
 					})
 					.join("\n");
