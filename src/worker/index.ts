@@ -344,6 +344,20 @@ app.get("/api/memories", async (c) => {
 	return c.json(await listMemories(c.env, userId));
 });
 
+app.post("/api/memories", async (c) => {
+	const userId = await requireUserId(c);
+	if (!userId) return c.json({ error: "未授权" }, 401);
+	if (!c.env.MEM0_API_KEY) return c.json({ error: "缺少 MEM0_API_KEY" }, 500);
+	const { text } = await c.req.json<{ text: string }>();
+	if (!text?.trim()) return c.json({ error: "内容不能为空" }, 400);
+	const result = await addMemories(
+		c.env,
+		[{ role: "user", content: text.trim() }],
+		userId,
+	);
+	return c.json({ ok: true, memories: result });
+});
+
 app.delete("/api/memories/:id", async (c) => {
 	const userId = await requireUserId(c);
 	if (!userId) return c.json({ error: "未授权" }, 401);

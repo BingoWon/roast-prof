@@ -187,6 +187,8 @@ interface MemoryItem {
 const MemoryPanel: FC = () => {
 	const [memories, setMemories] = useState<MemoryItem[]>([]);
 	const [loading, setLoading] = useState(true);
+	const [draft, setDraft] = useState("");
+	const [adding, setAdding] = useState(false);
 
 	const fetchMemories = useCallback(async () => {
 		setLoading(true);
@@ -204,6 +206,25 @@ const MemoryPanel: FC = () => {
 		fetchMemories();
 	}, [fetchMemories]);
 
+	const handleAdd = async () => {
+		const text = draft.trim();
+		if (!text || adding) return;
+		setAdding(true);
+		setDraft("");
+		try {
+			await fetch("/api/memories", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ text }),
+			});
+			await fetchMemories();
+		} catch {
+			/* ignore */
+		} finally {
+			setAdding(false);
+		}
+	};
+
 	const handleDelete = async (id: string) => {
 		setMemories((prev) => prev.filter((m) => m.id !== id));
 		await fetch(`/api/memories/${id}`, { method: "DELETE" });
@@ -211,8 +232,31 @@ const MemoryPanel: FC = () => {
 
 	return (
 		<div className="flex-1 flex flex-col overflow-hidden">
-			<div className="m-3 flex items-center justify-between">
-				<span className="text-xs text-zinc-500 dark:text-zinc-400">
+			{/* Add memory input */}
+			<div className="m-3 flex flex-col gap-2">
+				<div className="flex items-center gap-2">
+					<input
+						type="text"
+						value={draft}
+						onChange={(e) => setDraft(e.target.value)}
+						onKeyDown={(e) => e.key === "Enter" && handleAdd()}
+						placeholder="添加记忆，如：我不吃辣"
+						className="flex-1 text-xs bg-zinc-100 dark:bg-zinc-800 rounded-lg px-3 py-2 outline-none text-zinc-700 dark:text-zinc-300 placeholder:text-zinc-400 dark:placeholder:text-zinc-600 border border-transparent focus:border-zinc-300 dark:focus:border-zinc-600 transition"
+					/>
+					<button
+						type="button"
+						onClick={handleAdd}
+						disabled={!draft.trim() || adding}
+						className="shrink-0 flex items-center justify-center h-8 w-8 rounded-lg bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 disabled:opacity-40 transition cursor-pointer disabled:cursor-not-allowed"
+					>
+						{adding ? (
+							<Loader2 className="w-3.5 h-3.5 animate-spin" />
+						) : (
+							<Plus className="w-3.5 h-3.5" />
+						)}
+					</button>
+				</div>
+				<span className="text-[10px] text-zinc-400 dark:text-zinc-600">
 					{loading ? "加载中..." : `${memories.length} 条记忆`}
 				</span>
 			</div>
@@ -225,7 +269,7 @@ const MemoryPanel: FC = () => {
 							暂无记忆
 						</p>
 						<p className="text-[10px] text-zinc-400/60 dark:text-zinc-600/60 mt-1 max-w-[180px]">
-							与 AI 对话时会自动提取并保存关键信息
+							对话时自动提取，或在上方手动添加
 						</p>
 					</div>
 				)}
