@@ -38,7 +38,7 @@ import {
 	unlinkUserPaper,
 } from "./rag";
 import { papers, userPapers } from "./schema";
-import { createRagTools, staticTools } from "./tools";
+import { createMemoryTool, createRagTools, staticTools } from "./tools";
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -453,8 +453,14 @@ app.post("/api/chat", async (c) => {
 			}
 		}
 
-		// ── Build tools (static + RAG if available) ─────────────────────────
+		// ── Build tools ─────────────────────────────────────────────────────
 		const systemPrompt = SYSTEM_PROMPT + formatMemoriesForPrompt(retrievedMemories);
+
+		// biome-ignore lint/suspicious/noExplicitAny: tool generics incompatible with Record
+		let memoryTools: Record<string, any> = {};
+		if (userId && c.env.MEM0_API_KEY) {
+			memoryTools = createMemoryTool({ env: c.env, userId });
+		}
 
 		// biome-ignore lint/suspicious/noExplicitAny: tool generics incompatible with Record
 		let ragTools: Record<string, any> = {};
@@ -534,7 +540,7 @@ app.post("/api/chat", async (c) => {
 					model: wrappedModel,
 					system: systemPrompt,
 					messages: modelMessages,
-					tools: { ...staticTools, ...ragTools },
+					tools: { ...staticTools, ...memoryTools, ...ragTools },
 					stopWhen: stepCountIs(5),
 					...(isHitlContinuation && {
 						providerOptions: {

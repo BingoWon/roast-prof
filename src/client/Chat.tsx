@@ -292,6 +292,7 @@ const AssistantMessage: FC = () => (
 							rag_suggest: SuggestSearchToolUI,
 							rag_search: PaperSearchToolUI,
 							update_recipe: RecipeToolUI,
+						save_memory: SaveMemoryToolUI,
 						},
 					},
 				}}
@@ -473,6 +474,28 @@ const MemoryIndicator: FC = () => {
 };
 
 // ── Tool UIs ─────────────────────────────────────────────────────────────────
+
+const SaveMemoryToolUI: FC<ToolCallMessagePartProps> = ({
+	args,
+	result,
+	isError,
+}) => {
+	const a = args as { content?: string } | undefined;
+	if (isError)
+		return <div className="mb-2 text-xs text-red-500">记忆保存失败</div>;
+	if (!result) {
+		return (
+			<div className="mb-2 flex items-center gap-2 text-xs text-indigo-600 dark:text-indigo-400">
+				<Loader2 className="w-3.5 h-3.5 animate-spin" /> 正在保存记忆...
+			</div>
+		);
+	}
+	return (
+		<div className="mb-2 flex items-center gap-2 text-xs text-emerald-600 dark:text-emerald-400">
+			<Check className="w-3.5 h-3.5" /> 已记住：{a?.content}
+		</div>
+	);
+};
 
 const RecipeToolUI: FC<ToolCallMessagePartProps> = ({ result, isError }) => {
 	const onRecipeUpdate = useContext(RecipeUpdateCtx);

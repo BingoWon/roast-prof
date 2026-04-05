@@ -1,6 +1,7 @@
 import { tool, zodSchema } from "ai";
 import { z } from "zod";
 import type { DbClient } from "./db";
+import { addMemories } from "./memory";
 import { retrieveContext } from "./rag";
 
 type RagEnv = {
@@ -123,6 +124,41 @@ export const staticTools = {
 		execute: async (input) => input,
 	}),
 };
+
+/** Create memory tool with request-scoped context. */
+export function createMemoryTool(opts: {
+	env: { MEM0_API_KEY: string };
+	userId: string;
+}) {
+	return {
+		save_memory: tool({
+			description:
+				"保存用户信息到长期记忆。当用户要求你记住某些信息（偏好、个人信息、习惯等）时调用此工具。",
+			inputSchema: zodSchema(
+				z.object({
+					content: z
+						.string()
+						.describe(
+							"要记住的内容，用陈述句描述，如「用户的名字是王斌」「用户不吃辣」",
+						),
+				}),
+			),
+			execute: async ({ content }) => {
+				const result = await addMemories(
+					opts.env,
+					[{ role: "user", content }],
+					opts.userId,
+				);
+				const added = result.filter((e) => e.event === "ADD");
+				return {
+					success: true,
+					count: added.length,
+					message: added.length > 0 ? "已保存到记忆" : "信息已存在或无法提取",
+				};
+			},
+		}),
+	};
+}
 
 /** Create RAG tools with request-scoped context. */
 export function createRagTools(opts: {
