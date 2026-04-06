@@ -18,6 +18,7 @@ import {
 	createContext,
 	type FC,
 	type ReactNode,
+	useCallback,
 	useContext,
 	useEffect,
 	useMemo,
@@ -48,6 +49,15 @@ const PersonaCtx = createContext<{
 }>({ persona: DEFAULT_PERSONA, setPersona: () => {} });
 
 export const usePersona = () => useContext(PersonaCtx);
+
+// ── Auto-TTS Context (persisted per-browser in localStorage) ──────────────
+
+const AutoTTSCtx = createContext<{
+	autoTTS: boolean;
+	setAutoTTS: (v: boolean) => void;
+}>({ autoTTS: true, setAutoTTS: () => {} });
+
+export const useAutoTTS = () => useContext(AutoTTSCtx);
 
 // ── ElevenLabs Adapters (stable module-scope instances) ─────────────────────
 
@@ -289,9 +299,29 @@ function useMyRuntime() {
 
 // ── Root Provider ───────────────────────────────────────────────────────────
 
+const AUTO_TTS_KEY = "settings:autoTTS";
+
 export const RuntimeProvider: FC<{ children: ReactNode }> = ({ children }) => {
 	const [persona, setPersona] = useState<PersonaId>(DEFAULT_PERSONA);
 	const personaCtx = useMemo(() => ({ persona, setPersona }), [persona]);
+
+	const [autoTTS, setAutoTTSRaw] = useState(() => {
+		try {
+			return localStorage.getItem(AUTO_TTS_KEY) !== "false";
+		} catch {
+			return true;
+		}
+	});
+	const setAutoTTS = useCallback((v: boolean) => {
+		setAutoTTSRaw(v);
+		try {
+			localStorage.setItem(AUTO_TTS_KEY, String(v));
+		} catch {}
+	}, []);
+	const autoTTSCtx = useMemo(
+		() => ({ autoTTS, setAutoTTS }),
+		[autoTTS, setAutoTTS],
+	);
 
 	const runtime = useRemoteThreadListRuntime({
 		runtimeHook: useMyRuntime,
@@ -300,21 +330,24 @@ export const RuntimeProvider: FC<{ children: ReactNode }> = ({ children }) => {
 
 	return (
 		<PersonaCtx value={personaCtx}>
-			<AssistantRuntimeProvider runtime={runtime}>
-				<PersonaSync />
-				{/* Each tool UI matches a backend tool by toolName */}
-				<AskUserToolUI />
-				<SearchToolUI />
-				<AcademicSearchToolUI />
-				<DocSuggestToolUI />
-				<DocSearchToolUI />
-				<OpenDocToolUI />
-				<HighlightDocToolUI />
-				<ReadDocToolUI />
-				<RecipeToolUI />
-				<SaveMemoryToolUI />
-				{children}
-			</AssistantRuntimeProvider>
+			<AutoTTSCtx value={autoTTSCtx}>
+				<AssistantRuntimeProvider runtime={runtime}>
+					<PersonaSync />
+					<AutoSpeakWatcher />
+					{/* Each tool UI matches a backend tool by toolName */}
+					<AskUserToolUI />
+					<SearchToolUI />
+					<AcademicSearchToolUI />
+					<DocSuggestToolUI />
+					<DocSearchToolUI />
+					<OpenDocToolUI />
+					<HighlightDocToolUI />
+					<ReadDocToolUI />
+					<RecipeToolUI />
+					<SaveMemoryToolUI />
+					{children}
+				</AssistantRuntimeProvider>
+			</AutoTTSCtx>
 		</PersonaCtx>
 	);
 };
@@ -328,6 +361,34 @@ function PersonaSync() {
 		const mapped = remoteId ? threadPersonaMap.get(remoteId) : undefined;
 		if (mapped) setPersona(mapped);
 	}, [remoteId, setPersona]);
+
+	return null;
+}
+
+/** Auto-speaks last assistant message when generation finishes. */
+function AutoSpeakWatcher() {
+	const { autoTTS } = useAutoTTS();
+	const aui = useAui();
+	const isRunning = useAuiState((s) => s.thread.isRunning);
+	const wasRunning = useRef(false);
+
+	useEffect(() => {
+		if (wasRunning.current && !isRunning && autoTTS) {
+			// Generation just finished — speak the last assistant message
+			const messages = aui.thread().getState().messages;
+			const last = [...messages].reverse().find((m) => m.role === "assistant");
+			if (last) {
+				const text = last.content
+					.filter((p): p is { type: "text"; text: string } => p.type === "text")
+					.map((p) => p.text)
+					.join("\n");
+				if (text.trim()) {
+					ttsAdapter.speak(text);
+				}
+			}
+		}
+		wasRunning.current = isRunning;
+	}, [isRunning, autoTTS, aui]);
 
 	return null;
 }

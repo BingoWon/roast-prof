@@ -38,7 +38,7 @@ import { ToolCallFallback } from "./components/tools/ToolCallFallback";
 import { Button } from "./components/ui/button";
 import { MarkdownText } from "./components/ui/markdown-text";
 import { TooltipIconButton } from "./components/ui/tooltip-icon-button";
-import { usePersona } from "./RuntimeProvider";
+import { useAutoTTS, usePersona } from "./RuntimeProvider";
 
 // ── Recipe Update Context ────────────────────────────────────────────────────
 
@@ -379,10 +379,33 @@ const PersonaSwitcher: FC = () => {
 	);
 };
 
+const AutoTTSToggle: FC = () => {
+	const { autoTTS, setAutoTTS } = useAutoTTS();
+	return (
+		<button
+			type="button"
+			onClick={() => setAutoTTS(!autoTTS)}
+			className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition-all active:scale-95 cursor-pointer ${
+				autoTTS
+					? "text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-950/30"
+					: "text-zinc-300 dark:text-zinc-600 hover:bg-zinc-100 dark:hover:bg-zinc-700"
+			}`}
+			title={autoTTS ? "自动朗读：开启" : "自动朗读：关闭"}
+		>
+			{autoTTS ? (
+				<Volume2 className="h-4 w-4" />
+			) : (
+				<VolumeOff className="h-4 w-4" />
+			)}
+		</button>
+	);
+};
+
 const ComposerAction: FC = () => (
 	<div className="relative mx-2 mb-2 flex items-center justify-between">
 		<div className="flex items-center gap-1">
 			<PersonaSwitcher />
+			<AutoTTSToggle />
 
 			<ComposerPrimitive.AddAttachment
 				className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-zinc-400 dark:text-zinc-500 transition-all hover:bg-zinc-100 dark:hover:bg-zinc-700 hover:text-zinc-600 dark:hover:text-zinc-300 active:scale-95 cursor-pointer"
