@@ -7,7 +7,7 @@ import {
 	useVoiceState,
 } from "@assistant-ui/react";
 import { ArrowDown, X } from "lucide-react";
-import { type FC, useEffect } from "react";
+import { type FC, useEffect, useRef } from "react";
 import type { PersonaId } from "../../worker/model";
 import { usePersona } from "../RuntimeProvider";
 import { MarkdownText } from "./ui/markdown-text";
@@ -64,7 +64,7 @@ export const VoiceThread: FC<{
 					<VoiceWelcome docTitle={docTitle} />
 				</AuiIf>
 
-				<AutoConnect />
+				<AutoConnect onDisconnect={onExit} />
 
 				<ThreadPrimitive.Messages>
 					{() => <ThreadMessage />}
@@ -79,17 +79,27 @@ export const VoiceThread: FC<{
 	);
 };
 
-// ── Auto-connect on mount ───────────────────────────────────────────────────
+// ── Auto-connect on mount (once only) ───────────────────────────────────────
 
-const AutoConnect: FC = () => {
+const AutoConnect: FC<{ onDisconnect: () => void }> = ({ onDisconnect }) => {
 	const controls = useVoiceControls();
 	const voiceState = useVoiceState();
+	const didConnect = useRef(false);
 
+	// Connect once on mount
 	useEffect(() => {
-		if (!voiceState && controls) {
+		if (!didConnect.current && !voiceState && controls) {
+			didConnect.current = true;
 			controls.connect();
 		}
 	}, [voiceState, controls]);
+
+	// Exit voice mode when session ends (user clicked disconnect)
+	useEffect(() => {
+		if (didConnect.current && voiceState?.status.type === "ended") {
+			onDisconnect();
+		}
+	}, [voiceState?.status.type, onDisconnect]);
 
 	return null;
 };

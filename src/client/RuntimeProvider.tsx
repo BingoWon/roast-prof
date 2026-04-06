@@ -253,8 +253,11 @@ function useMyRuntime() {
 	const aui = useAui();
 	const { persona } = usePersona();
 
-	// Sync TTS voice to current persona
-	ttsAdapter.voiceId = PERSONAS[persona].voiceId;
+	// Sync TTS voice + params to current persona
+	const currentPersona = PERSONAS[persona];
+	ttsAdapter.voiceId = currentPersona.voiceId;
+	ttsAdapter.voiceSpeed = currentPersona.voiceSpeed;
+	ttsAdapter.voiceStability = currentPersona.voiceStability;
 
 	const stateRef = useRef(aui.threadListItem().getState());
 	stateRef.current = aui.threadListItem().getState();
@@ -456,12 +459,14 @@ function PersonaSync() {
 /** Auto-speaks last assistant message when generation finishes. */
 function AutoSpeakWatcher() {
 	const { autoTTS } = useAutoTTS();
+	const { voiceMode } = useVoiceMode();
 	const aui = useAui();
 	const isRunning = useAuiState((s) => s.thread.isRunning);
 	const wasRunning = useRef(false);
 
 	useEffect(() => {
-		if (wasRunning.current && !isRunning && autoTTS) {
+		// Skip auto-TTS when in voice mode (voice mode has its own audio)
+		if (wasRunning.current && !isRunning && autoTTS && !voiceMode.active) {
 			// Generation just finished — speak the last assistant message
 			const messages = aui.thread().getState().messages;
 			const last = [...messages].reverse().find((m) => m.role === "assistant");
@@ -476,7 +481,7 @@ function AutoSpeakWatcher() {
 			}
 		}
 		wasRunning.current = isRunning;
-	}, [isRunning, autoTTS, aui]);
+	}, [isRunning, autoTTS, aui, voiceMode.active]);
 
 	return null;
 }

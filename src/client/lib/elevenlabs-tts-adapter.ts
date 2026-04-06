@@ -46,6 +46,8 @@ function stripMarkdown(md: string): string {
 export class ElevenLabsTTSAdapter implements SpeechSynthesisAdapter {
 	private endpoint: string;
 	voiceId: string | undefined;
+	voiceSpeed: number | undefined;
+	voiceStability: number | undefined;
 
 	constructor(options?: { endpoint?: string }) {
 		this.endpoint = options?.endpoint ?? "/api/tts";
@@ -106,7 +108,12 @@ export class ElevenLabsTTSAdapter implements SpeechSynthesisAdapter {
 			const res = await fetch(this.endpoint, {
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({ text, voiceId: this.voiceId }),
+				body: JSON.stringify({
+					text,
+					voiceId: this.voiceId,
+					speed: this.voiceSpeed,
+					stability: this.voiceStability,
+				}),
 				signal,
 			});
 

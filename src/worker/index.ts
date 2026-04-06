@@ -136,9 +136,11 @@ app.post("/api/tts", async (c) => {
 	if (!apiKey)
 		return c.json({ error: "ELEVENLABS_API_KEY not configured" }, 500);
 
-	const { text, voiceId } = await c.req.json<{
+	const { text, voiceId, speed, stability } = await c.req.json<{
 		text: string;
 		voiceId?: string;
+		speed?: number;
+		stability?: number;
 	}>();
 	if (!text?.trim()) return c.json({ error: "text is required" }, 400);
 
@@ -156,6 +158,11 @@ app.post("/api/tts", async (c) => {
 				model_id: "eleven_v3",
 				output_format: "mp3_44100_128",
 				language_code: "zh",
+				voice_settings: {
+					stability: stability ?? 0.5,
+					similarity_boost: 0.75,
+					speed: speed ?? 1.0,
+				},
 			}),
 		},
 	);
