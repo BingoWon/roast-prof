@@ -1,5 +1,3 @@
-import type { RealtimeVoiceAdapter } from "@assistant-ui/react";
-import { createVoiceSession } from "@assistant-ui/react";
 import { VoiceConversation } from "@elevenlabs/client";
 
 export interface VoiceSessionOverrides {
@@ -10,9 +8,18 @@ export interface VoiceSessionOverrides {
 	voiceStability?: number;
 }
 
-export interface VoiceAdapterOptions {
-	signedUrlEndpoint: string;
-	overrides?: VoiceSessionOverrides;
+export interface VoiceTranscript {
+	role: "user" | "assistant";
+	text: string;
+}
+
+export type VoiceStatus = "idle" | "connecting" | "running" | "ended" | "error";
+
+export interface VoiceSessionCallbacks {
+	onStatusChange: (status: VoiceStatus) => void;
+	onTranscript: (item: VoiceTranscript) => void;
+	onModeChange: (mode: "listening" | "speaking") => void;
+	onVolumeChange: (volume: number) => void;
 }
 
 /** Strip ElevenLabs mood/action tags: [sigh], [laughs], [背景音乐] etc. */
@@ -20,131 +27,99 @@ function stripMoodTags(text: string): string {
 	return text.replace(/\[[^\]]*\]/g, "").trim();
 }
 
-export class ElevenLabsVoiceAdapter implements RealtimeVoiceAdapter {
-	private opts: VoiceAdapterOptions;
+export async function startVoiceSession(
+	signedUrlEndpoint: string,
+	overrides: VoiceSessionOverrides,
+	callbacks: VoiceSessionCallbacks,
+): Promise<{ disconnect: () => void; mute: () => void; unmute: () => void }> {
+	let volumeInterval: ReturnType<typeof setInterval> | null = null;
+	const lastEmitted = { user: "", assistant: "" };
 
-	constructor(opts: VoiceAdapterOptions) {
-		this.opts = opts;
-	}
+	const cleanup = () => {
+		if (volumeInterval) {
+			clearInterval(volumeInterval);
+			volumeInterval = null;
+		}
+	};
 
-	configure(overrides: VoiceSessionOverrides) {
-		this.opts.overrides = overrides;
-	}
+	try {
+		callbacks.onStatusChange("connecting");
+		const res = await fetch(signedUrlEndpoint);
+		if (!res.ok) {
+			callbacks.onStatusChange("error");
+			return { disconnect() {}, mute() {}, unmute() {} };
+		}
+		const { signedUrl } = (await res.json()) as { signedUrl: string };
 
-	connect(connectOpts: { abortSignal?: AbortSignal }) {
-		const { signedUrlEndpoint, overrides } = this.opts;
+		const conversation = await VoiceConversation.startSession({
+			signedUrl,
+			connectionType: "websocket",
+			overrides: {
+				agent: {
+					...(overrides.systemPrompt && {
+						prompt: { prompt: overrides.systemPrompt },
+					}),
+					...(overrides.firstMessage && {
+						firstMessage: overrides.firstMessage,
+					}),
+					language: "zh",
+				},
+				tts: {
+					...(overrides.voiceId && { voiceId: overrides.voiceId }),
+					...(overrides.voiceSpeed != null && {
+						speed: overrides.voiceSpeed,
+					}),
+					...(overrides.voiceStability != null && {
+						stability: overrides.voiceStability,
+					}),
+				},
+			},
 
-		return createVoiceSession(connectOpts, async (ctx) => {
-			let volumeInterval: ReturnType<typeof setInterval> | null = null;
-			// Dedup: track last emitted text per role to avoid repeats
-			const lastEmitted = { user: "", assistant: "" };
+			onConnect: () => {
+				callbacks.onStatusChange("running");
+				volumeInterval = setInterval(() => {
+					callbacks.onVolumeChange(conversation.getInputVolume());
+				}, 50);
+			},
 
-			const cleanup = () => {
-				if (volumeInterval) {
-					clearInterval(volumeInterval);
-					volumeInterval = null;
-				}
-			};
-
-			try {
-				console.log("[Voice] Fetching signed URL...");
-				const res = await fetch(signedUrlEndpoint);
-				if (!res.ok) {
-					const body = await res.text().catch(() => "");
-					console.error("[Voice] Signed URL failed:", res.status, body);
-					throw new Error(`语音对话连接失败: ${res.status}`);
-				}
-				const { signedUrl } = (await res.json()) as {
-					signedUrl: string;
-				};
-				console.log("[Voice] Connecting WebSocket...");
-
-				const conversation = await VoiceConversation.startSession({
-					signedUrl,
-					connectionType: "websocket",
-					overrides: {
-						agent: {
-							...(overrides?.systemPrompt && {
-								prompt: { prompt: overrides.systemPrompt },
-							}),
-							...(overrides?.firstMessage && {
-								firstMessage: overrides.firstMessage,
-							}),
-							language: "zh",
-						},
-						tts: {
-							...(overrides?.voiceId && {
-								voiceId: overrides.voiceId,
-							}),
-							...(overrides?.voiceSpeed != null && {
-								speed: overrides.voiceSpeed,
-							}),
-							...(overrides?.voiceStability != null && {
-								stability: overrides.voiceStability,
-							}),
-						},
-					},
-
-					onConnect: () => {
-						console.log("[Voice] Connected!");
-						ctx.setStatus({ type: "running" });
-						volumeInterval = setInterval(() => {
-							ctx.emitVolume(conversation.getInputVolume());
-						}, 50);
-					},
-
-					onDisconnect: (details) => {
-						console.log("[Voice] Disconnected:", details);
-						cleanup();
-						ctx.end("finished");
-					},
-
-					onError: (error) => {
-						console.error("[Voice] Session error:", error);
-						cleanup();
-						ctx.end("error", error);
-					},
-
-					onModeChange: ({ mode }) => {
-						console.log("[Voice] Mode:", mode);
-						ctx.emitMode(mode === "speaking" ? "speaking" : "listening");
-					},
-
-					onMessage: ({ source, message }) => {
-						const role = source === "ai" ? "assistant" : "user";
-						const clean = stripMoodTags(message);
-						if (!clean) return;
-
-						// Dedup: skip if same as last emitted for this role
-						if (lastEmitted[role] === clean) return;
-						lastEmitted[role] = clean;
-
-						ctx.emitTranscript({
-							role,
-							text: clean,
-							isFinal: true,
-						});
-					},
-				});
-
-				return {
-					disconnect: () => {
-						console.log("[Voice] User disconnect requested");
-						conversation.endSession();
-					},
-					mute: () => conversation.setVolume({ volume: 0 }),
-					unmute: () => conversation.setVolume({ volume: 1 }),
-				};
-			} catch (error) {
-				console.error("[Voice] Connection failed:", error);
+			onDisconnect: () => {
 				cleanup();
-				ctx.end("error", error);
-				return {
-					disconnect: () => {},
-					mute: () => {},
-					unmute: () => {},
-				};
-			}
+				callbacks.onStatusChange("ended");
+			},
+
+			onError: (error) => {
+				console.error("[Voice]", error);
+				cleanup();
+				callbacks.onStatusChange("error");
+			},
+
+			onModeChange: ({ mode }) => {
+				callbacks.onModeChange(mode === "speaking" ? "speaking" : "listening");
+			},
+
+			onMessage: ({ source, message }) => {
+				const role = source === "ai" ? "assistant" : "user";
+				const clean = stripMoodTags(message);
+				if (!clean) return;
+
+				const prev = lastEmitted[role];
+				if (prev === clean) return;
+				if (prev?.startsWith(clean)) return;
+				lastEmitted[role] = clean;
+
+				callbacks.onTranscript({ role, text: clean });
+			},
 		});
+
+		return {
+			disconnect: () => conversation.endSession(),
+			mute: () => conversation.setVolume({ volume: 0 }),
+			unmute: () => conversation.setVolume({ volume: 1 }),
+		};
+	} catch (error) {
+		console.error("[Voice]", error);
+		cleanup();
+		callbacks.onStatusChange("error");
+		return { disconnect() {}, mute() {}, unmute() {} };
 	}
 }

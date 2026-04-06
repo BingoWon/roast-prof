@@ -85,7 +85,7 @@ export function createMemoryTool(opts: {
 export const hitlTools = {
 	ask_user: tool({
 		description:
-			"向用户提出问题或请求确认。当你需要用户做出选择、提供信息或确认操作时，**必须**调用此工具而非直接提问。工具会在聊天中渲染交互卡片，用户可以从预设选项中选择或自行输入。你**必须**提供至少 2 个选项供用户选择，数量不限。",
+			"向用户提出问题或请求确认。当你需要用户做出选择、提供信息或确认操作时，**必须**调用此工具而非直接提问。工具会在聊天中渲染交互卡片，用户可以从预设选项中选择或自行输入。你**必须**提供至少 2 个选项供用户选择，数量不限。每个选项的 label 建议以 emoji 开头使界面更生动。",
 		inputSchema: zodSchema(
 			z.object({
 				question: z.string().describe("向用户提出的问题"),
@@ -99,7 +99,7 @@ export const hitlTools = {
 					)
 					.min(2)
 					.describe(
-						"预设选项列表，至少 2 个，数量不限。覆盖用户最可能的选择。",
+						"预设选项列表，至少 2 个。label 以 emoji 开头（如「✅ 确认」「🔄 重试」）。覆盖用户最可能的选择。",
 					),
 				allowCustomInput: z
 					.boolean()

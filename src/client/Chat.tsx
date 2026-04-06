@@ -461,7 +461,7 @@ const UserActionBar: FC = () => (
 	>
 		<ActionBarPrimitive.Edit asChild>
 			<TooltipIconButton tooltip="编辑" className="p-4">
-				<Pencil className="h-4 w-4" />
+				<Pencil className="h-4 w-4 text-zinc-400" />
 			</TooltipIconButton>
 		</ActionBarPrimitive.Edit>
 	</ActionBarPrimitive.Root>
@@ -489,6 +489,8 @@ const EditComposer: FC = () => (
 		</ComposerPrimitive.Root>
 	</MessagePrimitive.Root>
 );
+
+// ── Reasoning dedup context ──────────────────────────────────────────────────
 
 // ── Assistant Message ────────────────────────────────────────────────────────
 
@@ -689,19 +691,35 @@ export function Chat({
 							turnAnchor="top"
 							className="relative flex flex-1 flex-col overflow-x-hidden overflow-y-auto scroll-smooth px-4 pt-4"
 						>
-							{/* Existing thread loading → spinner; new thread → welcome */}
-							<AuiIf
-								condition={(s) =>
-									s.thread.isEmpty && !!s.threadListItem.remoteId
-								}
-							>
+							{/* Loading → spinner */}
+							<AuiIf condition={(s) => s.thread.isEmpty && s.thread.isLoading}>
 								<div className="flex flex-1 items-center justify-center">
 									<Loader2 className="h-5 w-5 animate-spin text-zinc-300 dark:text-zinc-600" />
 								</div>
 							</AuiIf>
+							{/* Loaded but empty with remoteId → orphaned thread */}
 							<AuiIf
 								condition={(s) =>
-									s.thread.isEmpty && !s.threadListItem.remoteId
+									s.thread.isEmpty &&
+									!s.thread.isLoading &&
+									!!s.threadListItem.remoteId
+								}
+							>
+								<div className="flex flex-1 flex-col items-center justify-center gap-2 text-center px-8">
+									<div className="text-sm text-zinc-500 dark:text-zinc-400">
+										该对话没有消息记录
+									</div>
+									<div className="text-xs text-zinc-400 dark:text-zinc-500">
+										可能是之前的操作异常导致，请开启新对话
+									</div>
+								</div>
+							</AuiIf>
+							{/* New thread → persona selection */}
+							<AuiIf
+								condition={(s) =>
+									s.thread.isEmpty &&
+									!s.thread.isLoading &&
+									!s.threadListItem.remoteId
 								}
 							>
 								<PersonaSelect />

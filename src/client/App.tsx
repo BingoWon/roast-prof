@@ -617,7 +617,13 @@ const RightPanel: FC<{
 	const { voiceMode, exitVoiceMode } = useVoiceMode();
 
 	if (voiceMode.active && voiceMode.docTitle) {
-		return <VoiceThread docTitle={voiceMode.docTitle} onExit={exitVoiceMode} />;
+		return (
+			<VoiceThread
+				docTitle={voiceMode.docTitle}
+				systemPrompt={voiceMode.systemPrompt ?? ""}
+				onExit={(msgs) => exitVoiceMode(msgs)}
+			/>
+		);
 	}
 
 	return (

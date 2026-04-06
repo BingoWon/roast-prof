@@ -35,6 +35,7 @@ export const AskUserToolUI = makeAssistantToolUI<Args, Result>({
 			);
 		}
 
+		// No result yet — always show interactive card (whether current or from history)
 		const options = args?.options ?? [];
 		const optionsStreaming = propStatus.options === "streaming";
 		const question = args?.question ?? "";

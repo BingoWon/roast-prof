@@ -1,4 +1,4 @@
-import { and, asc, desc, eq } from "drizzle-orm";
+import { and, asc, desc, eq, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import { DEFAULT_PERSONA, isValidPersona, type PersonaId } from "./model";
 import { messages, threads } from "./schema";
@@ -113,7 +113,10 @@ export async function saveMessages(
 	await db
 		.insert(messages)
 		.values(msgs)
-		.onConflictDoNothing({ target: messages.id });
+		.onConflictDoUpdate({
+			target: messages.id,
+			set: { parts: sql`excluded.parts` },
+		});
 }
 
 export async function touchThread(db: DbClient, id: string, userId: string) {

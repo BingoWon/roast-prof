@@ -108,6 +108,38 @@ app.get("/api/threads/:id/messages", async (c) => {
 	return c.json(rows.map((r) => ({ id: r.id, role: r.role, parts: r.parts })));
 });
 
+// ── Voice messages (persist voice transcripts to thread) ────────────────────
+app.post("/api/threads/:id/voice-messages", async (c) => {
+	const userId = await requireUserId(c);
+	if (!userId) return c.json({ error: "未授权" }, 401);
+	const db = createDb(c.env.DB);
+	const threadId = c.req.param("id");
+	const thread = await getThread(db, threadId);
+	if (!thread || thread.userId !== userId)
+		return c.json({ error: "未找到" }, 404);
+
+	const { messages: msgs } = await c.req.json<{
+		messages: { id: string; role: string; parts: unknown[] }[];
+	}>();
+
+	if (msgs?.length) {
+		const now = Math.floor(Date.now() / 1000);
+		await saveMessages(
+			db,
+			msgs.map((m) => ({
+				id: m.id,
+				threadId,
+				role: m.role,
+				parts: m.parts,
+				createdAt: now,
+			})),
+		);
+		await touchThread(db, threadId, userId);
+	}
+
+	return c.json({ ok: true });
+});
+
 // ── ElevenLabs Scribe token (STT) ───────────────────────────────────────────
 app.post("/api/scribe-token", async (c) => {
 	const userId = await requireUserId(c);
@@ -510,6 +542,36 @@ function resolveDataUrls(messages: WireMessage[]): WireMessage[] {
 	});
 }
 
+/**
+ * Strip unresolved HITL tool calls from messages to prevent
+ * "Tool result is missing" errors from the LLM.
+ *
+ * assistant-ui tool part format:
+ *   - Non-HITL (execute): { type: "tool-xxx", state: "output-available", output: {...} }
+ *   - HITL answered:      { type: "tool-xxx", state: "result", result: {...} }
+ *   - HITL unanswered:    { type: "tool-xxx", state: "input-available", input: {...} }
+ *
+ * We strip only tool parts that are HITL AND unanswered (state === "input-available").
+ */
+function stripUnresolvedToolCalls(messages: WireMessage[]): WireMessage[] {
+	return messages.map((msg) => {
+		if (msg.role !== "assistant" || !Array.isArray(msg.parts)) return msg;
+		const filtered = msg.parts.filter(
+			// biome-ignore lint/suspicious/noExplicitAny: wire format
+			(part: any) => {
+				if (!part.type?.startsWith("tool-")) return true;
+				// Keep if resolved: has output (non-HITL) or result (HITL answered)
+				if (part.output != null || part.result != null) return true;
+				// Keep if state is not "input-available" (e.g. streaming, partial)
+				if (part.state !== "input-available") return true;
+				return false;
+			},
+		);
+		if (filtered.length === msg.parts.length) return msg;
+		return { ...msg, parts: filtered };
+	});
+}
+
 // ── Chat (AI SDK streamText + Assistant-UI) ──────────────────────────────────
 
 app.post("/api/chat", async (c) => {
@@ -565,6 +627,44 @@ app.post("/api/chat", async (c) => {
 				log.error({
 					module: "chat",
 					msg: "persist user msg failed",
+					error: String(e),
+				});
+			}
+		}
+
+		// ── Upsert assistant messages with tool results (so HITL results persist) ──
+		if (threadId && userId) {
+			try {
+				// Upsert any assistant messages whose tool parts have been resolved
+				// (HITL: result field set; non-HITL: output field set)
+				const assistantWithResults = messages.filter(
+					(m: WireMessage) =>
+						m.role === "assistant" &&
+						Array.isArray(m.parts) &&
+						m.parts.some(
+							// biome-ignore lint/suspicious/noExplicitAny: wire format
+							(p: any) =>
+								p.type?.startsWith("tool-") &&
+								(p.result != null || p.output != null),
+						),
+				);
+				if (assistantWithResults.length > 0) {
+					const now = Math.floor(Date.now() / 1000);
+					await saveMessages(
+						db,
+						assistantWithResults.map((m: WireMessage) => ({
+							id: m.id,
+							threadId,
+							role: "assistant",
+							parts: m.parts as unknown[],
+							createdAt: now,
+						})),
+					);
+				}
+			} catch (e) {
+				log.error({
+					module: "chat",
+					msg: "upsert tool results failed",
 					error: String(e),
 				});
 			}
@@ -707,7 +807,7 @@ app.post("/api/chat", async (c) => {
 			execute: async ({ writer }) => {
 				const modelMessages = await convertToModelMessages(
 					// biome-ignore lint/suspicious/noExplicitAny: wire format → UIMessage
-					resolveDataUrls(messages) as any,
+					stripUnresolvedToolCalls(resolveDataUrls(messages)) as any,
 				);
 
 				const lastModelMsg = modelMessages[modelMessages.length - 1];
@@ -751,14 +851,20 @@ app.post("/api/chat", async (c) => {
 			onFinish: async ({ messages: finishedMessages }) => {
 				try {
 					if (threadId && userId && finishedMessages.length > 0) {
-						const assistantMsgs = finishedMessages.filter(
-							(m) => m.role !== "user",
+						// Only save TRULY NEW messages (not already in input).
+						// Existing messages get their tool results updated via
+						// the upsert logic earlier in the request.
+						const inputIds = new Set(
+							messages.map((m: WireMessage) => m.id).filter(Boolean),
 						);
-						if (assistantMsgs.length > 0) {
+						const newMsgs = finishedMessages.filter(
+							(m) => m.role !== "user" && !inputIds.has(m.id),
+						);
+						if (newMsgs.length > 0) {
 							const now = Math.floor(Date.now() / 1000);
 							await saveMessages(
 								db,
-								assistantMsgs.map((m) => ({
+								newMsgs.map((m) => ({
 									id: m.id,
 									threadId,
 									role: m.role,

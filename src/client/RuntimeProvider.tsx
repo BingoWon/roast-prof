@@ -40,7 +40,6 @@ import { SaveMemoryToolUI } from "./components/tools/SaveMemoryToolUI";
 import { SearchToolUI } from "./components/tools/SearchToolUI";
 import { ElevenLabsScribeAdapter } from "./lib/elevenlabs-scribe-adapter";
 import { ElevenLabsTTSAdapter } from "./lib/elevenlabs-tts-adapter";
-import { ElevenLabsVoiceAdapter } from "./lib/elevenlabs-voice-adapter";
 
 // ── Persona Context (per-thread persona, set at thread creation) ──────────
 
@@ -66,14 +65,20 @@ export interface VoiceModeState {
 	active: boolean;
 	docId: string | null;
 	docTitle: string | null;
+	systemPrompt: string | null;
+}
+
+interface VoiceTranscriptItem {
+	role: "user" | "assistant";
+	text: string;
 }
 
 const VoiceModeCtx = createContext<{
 	voiceMode: VoiceModeState;
 	enterVoiceMode: (docId: string, docTitle: string) => void;
-	exitVoiceMode: () => void;
+	exitVoiceMode: (voiceMessages?: VoiceTranscriptItem[]) => void;
 }>({
-	voiceMode: { active: false, docId: null, docTitle: null },
+	voiceMode: { active: false, docId: null, docTitle: null, systemPrompt: null },
 	enterVoiceMode: () => {},
 	exitVoiceMode: () => {},
 });
@@ -90,9 +95,14 @@ const scribeAdapter = new ElevenLabsScribeAdapter({
 
 const ttsAdapter = new ElevenLabsTTSAdapter({ endpoint: "/api/tts" });
 
-const voiceAdapter = new ElevenLabsVoiceAdapter({
-	signedUrlEndpoint: "/api/voice-signed-url",
-});
+const stableAdapters = {
+	dictation: scribeAdapter,
+	speech: ttsAdapter,
+};
+
+/** Voice messages pending merge into text chat. Module-level to bridge
+ *  between RuntimeProvider (writer) and useMyRuntime (reader). */
+let pendingVoiceMsgs: VoiceTranscriptItem[] | null = null;
 
 // ── Attachment Adapter ──────────────────────────────────────────────────────
 
@@ -293,9 +303,14 @@ function useMyRuntime() {
 		() =>
 			new DefaultChatTransport({
 				api: "/api/chat",
-				headers: () => {
-					const freshState = aui.threadListItem().getState();
-					const threadId = freshState.remoteId ?? freshState.id;
+				headers: async () => {
+					// Wait for initialize() to resolve remoteId (max ~500ms)
+					let state = aui.threadListItem().getState();
+					for (let i = 0; i < 50 && !state.remoteId; i++) {
+						await new Promise((r) => setTimeout(r, 10));
+						state = aui.threadListItem().getState();
+					}
+					const threadId = state.remoteId ?? state.id;
 					return {
 						"x-thread-id": threadId,
 						"x-persona": personaRef.current,
@@ -322,14 +337,54 @@ function useMyRuntime() {
 		}
 	}, [loadedMessages, chat.setMessages]);
 
+	// Merge voice messages into chat when returning from voice mode
 	const { voiceMode } = useVoiceMode();
+	useEffect(() => {
+		if (voiceMode.active || !pendingVoiceMsgs) return;
+		const voiceMsgs = pendingVoiceMsgs;
+		pendingVoiceMsgs = null;
+
+		// Insert a separator + voice transcripts into the chat
+		const existing = chat.messages;
+		const separator = {
+			id: crypto.randomUUID(),
+			role: "user" as const,
+			parts: [{ type: "text" as const, text: "🎙 进入语音陪读" }],
+		};
+		const converted = voiceMsgs.map((m) => ({
+			id: crypto.randomUUID(),
+			role: m.role as "user" | "assistant",
+			parts: [
+				{
+					type: "text" as const,
+					text: m.role === "assistant" ? `🎙 ${m.text}` : m.text,
+				},
+			],
+		}));
+		chat.setMessages([...existing, separator, ...converted]);
+
+		// Persist to DB
+		const threadId = aui.threadListItem().getState().remoteId;
+		if (threadId) {
+			fetch(`/api/threads/${threadId}/voice-messages`, {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ messages: [separator, ...converted] }),
+			}).catch(() => {});
+		}
+
+		// Scroll to bottom after merge
+		setTimeout(() => {
+			document
+				.querySelector(
+					"[data-role='assistant']:last-child, [data-role='user']:last-child",
+				)
+				?.scrollIntoView({ behavior: "smooth" });
+		}, 100);
+	}, [voiceMode.active, chat.messages, chat.setMessages, aui]);
 
 	return useAISDKRuntime(chat, {
-		adapters: {
-			dictation: scribeAdapter,
-			speech: ttsAdapter,
-			...(voiceMode.active ? { voice: voiceAdapter } : {}),
-		},
+		adapters: stableAdapters,
 	});
 }
 
@@ -338,8 +393,23 @@ function useMyRuntime() {
 const AUTO_TTS_KEY = "settings:autoTTS";
 
 export const RuntimeProvider: FC<{ children: ReactNode }> = ({ children }) => {
-	const [persona, setPersona] = useState<PersonaId>(DEFAULT_PERSONA);
-	const personaCtx = useMemo(() => ({ persona, setPersona }), [persona]);
+	const [persona, setPersonaRaw] = useState<PersonaId>(() => {
+		try {
+			const saved = localStorage.getItem("settings:persona");
+			if (saved && saved in PERSONAS) return saved as PersonaId;
+		} catch {}
+		return DEFAULT_PERSONA;
+	});
+	const setPersona = useCallback((id: PersonaId) => {
+		setPersonaRaw(id);
+		try {
+			localStorage.setItem("settings:persona", id);
+		} catch {}
+	}, []);
+	const personaCtx = useMemo(
+		() => ({ persona, setPersona }),
+		[persona, setPersona],
+	);
 
 	const [autoTTS, setAutoTTSRaw] = useState(() => {
 		try {
@@ -369,10 +439,17 @@ export const RuntimeProvider: FC<{ children: ReactNode }> = ({ children }) => {
 		active: false,
 		docId: null,
 		docTitle: null,
+		systemPrompt: null,
 	});
 
 	const enterVoiceMode = useCallback(
 		async (docId: string, docTitle: string) => {
+			// Stop any ongoing TTS before entering voice mode
+			try {
+				const speech = runtime.thread.getState().speech;
+				if (speech) runtime.thread.stopSpeaking();
+			} catch {}
+
 			// Fetch document content for system prompt injection
 			let docContent = "";
 			try {
@@ -403,8 +480,7 @@ export const RuntimeProvider: FC<{ children: ReactNode }> = ({ children }) => {
 			const p = PERSONAS[persona];
 			const truncated = docContent.slice(0, 12000);
 
-			voiceAdapter.configure({
-				systemPrompt: `${p.prompt}
+			const prompt = `${p.prompt}
 
 # 语音对话规则
 - 你正在与学生进行实时语音对话，讨论一篇文档
@@ -414,33 +490,24 @@ export const RuntimeProvider: FC<{ children: ReactNode }> = ({ children }) => {
 
 # 正在阅读的文档：「${docTitle}」
 
-${truncated}${chatSummary ? `\n\n# 之前的文字对话记录（供参考）\n${chatSummary}` : ""}`,
-				firstMessage:
-					p.firstMessages[Math.floor(Math.random() * p.firstMessages.length)],
-				voiceId: p.voiceId,
-				voiceSpeed: p.voiceSpeed,
-				voiceStability: p.voiceStability,
-			});
+${truncated}${chatSummary ? `\n\n# 之前的文字对话记录（供参考）\n${chatSummary}` : ""}`;
 
-			setVoiceMode({ active: true, docId, docTitle });
+			setVoiceMode({ active: true, docId, docTitle, systemPrompt: prompt });
 		},
 		[persona, runtime],
 	);
 
-	const exitVoiceMode = useCallback(() => {
-		console.log("[VoiceMode] Exiting...");
-		try {
-			const voice = runtime.thread.getState().voice;
-			console.log("[VoiceMode] Current voice state:", voice?.status.type);
-			if (voice && voice.status.type !== "ended") {
-				console.log("[VoiceMode] Disconnecting voice...");
-				runtime.thread.disconnectVoice();
-			}
-		} catch (e) {
-			console.warn("[VoiceMode] Disconnect error:", e);
+	const exitVoiceMode = useCallback((voiceMessages?: VoiceTranscriptItem[]) => {
+		if (voiceMessages && voiceMessages.length > 0) {
+			pendingVoiceMsgs = voiceMessages;
 		}
-		setVoiceMode({ active: false, docId: null, docTitle: null });
-	}, [runtime]);
+		setVoiceMode({
+			active: false,
+			docId: null,
+			docTitle: null,
+			systemPrompt: null,
+		});
+	}, []);
 
 	const voiceModeCtx = useMemo(
 		() => ({ voiceMode, enterVoiceMode, exitVoiceMode }),
