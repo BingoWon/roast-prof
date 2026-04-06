@@ -2,12 +2,17 @@ import type { RealtimeVoiceAdapter } from "@assistant-ui/react";
 import { createVoiceSession } from "@assistant-ui/react";
 import { VoiceConversation } from "@elevenlabs/client";
 
+export interface VoiceSessionOverrides {
+	systemPrompt?: string;
+	firstMessage?: string;
+	voiceId?: string;
+	voiceSpeed?: number;
+	voiceStability?: number;
+}
+
 export interface VoiceAdapterOptions {
 	signedUrlEndpoint: string;
-	/** Override system prompt per session */
-	systemPrompt?: string;
-	/** Override TTS voice per session */
-	voiceId?: string;
+	overrides?: VoiceSessionOverrides;
 }
 
 export class ElevenLabsVoiceAdapter implements RealtimeVoiceAdapter {
@@ -17,17 +22,16 @@ export class ElevenLabsVoiceAdapter implements RealtimeVoiceAdapter {
 		this.opts = opts;
 	}
 
-	/** Update options dynamically (e.g. when persona or document changes). */
-	configure(patch: Partial<VoiceAdapterOptions>) {
-		Object.assign(this.opts, patch);
+	/** Update overrides dynamically before connect(). */
+	configure(overrides: VoiceSessionOverrides) {
+		this.opts.overrides = overrides;
 	}
 
 	connect(connectOpts: { abortSignal?: AbortSignal }) {
-		const opts = this.opts;
+		const { signedUrlEndpoint, overrides } = this.opts;
 
 		return createVoiceSession(connectOpts, async (ctx) => {
-			// Fetch signed URL from backend
-			const res = await fetch(opts.signedUrlEndpoint);
+			const res = await fetch(signedUrlEndpoint);
 			if (!res.ok) throw new Error("语音对话连接失败");
 			const { signedUrl } = (await res.json()) as { signedUrl: string };
 
@@ -37,10 +41,24 @@ export class ElevenLabsVoiceAdapter implements RealtimeVoiceAdapter {
 				signedUrl,
 				connectionType: "websocket",
 				overrides: {
-					agent: opts.systemPrompt
-						? { prompt: { prompt: opts.systemPrompt } }
-						: undefined,
-					tts: opts.voiceId ? { voiceId: opts.voiceId } : undefined,
+					agent: {
+						...(overrides?.systemPrompt && {
+							prompt: { prompt: overrides.systemPrompt },
+						}),
+						...(overrides?.firstMessage && {
+							firstMessage: overrides.firstMessage,
+						}),
+						language: "zh",
+					},
+					tts: {
+						...(overrides?.voiceId && { voiceId: overrides.voiceId }),
+						...(overrides?.voiceSpeed != null && {
+							speed: overrides.voiceSpeed,
+						}),
+						...(overrides?.voiceStability != null && {
+							stability: overrides.voiceStability,
+						}),
+					},
 				},
 
 				onConnect: () => {

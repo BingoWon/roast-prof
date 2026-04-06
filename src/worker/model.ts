@@ -10,6 +10,9 @@ export type PersonaId = "blank_f" | "blank_m" | "professor" | "keli";
 export interface Persona {
 	name: string;
 	voiceId: string;
+	voiceSpeed?: number;
+	voiceStability?: number;
+	firstMessage: string;
 	prompt: string;
 }
 

@@ -142,7 +142,7 @@ app.post("/api/tts", async (c) => {
 	}>();
 	if (!text?.trim()) return c.json({ error: "text is required" }, 400);
 
-	const voice = voiceId || c.env.ELEVENLABS_VOICE_ID || "JBFqnCBsd6RMkjVDRZzb";
+	const voice = voiceId || "JBFqnCBsd6RMkjVDRZzb";
 	const res = await fetch(
 		`https://api.elevenlabs.io/v1/text-to-speech/${voice}/stream`,
 		{

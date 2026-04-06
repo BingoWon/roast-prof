@@ -373,10 +373,26 @@ export const RuntimeProvider: FC<{ children: ReactNode }> = ({ children }) => {
 			} catch {}
 
 			const p = PERSONAS[persona];
+			// ~12k chars ≈ ~3k tokens, well under ElevenLabs' recommended 2k token budget
+			// for prompt + doc combined
 			const truncated = docContent.slice(0, 12000);
+
 			voiceAdapter.configure({
-				systemPrompt: `${p.prompt}\n\n你正在和学生进行实时语音对话，讨论下面这篇文档。回答简洁口语化，适合语音交流，不要输出 markdown 格式。\n\n## 正在阅读的文档：「${docTitle}」\n\n${truncated}`,
+				systemPrompt: `${p.prompt}
+
+# 语音对话规则
+- 你正在与学生进行实时语音对话，讨论一篇文档
+- 回答简洁口语化，每次回复控制在3-5句话以内
+- 禁止输出 markdown、代码块、列表符号等书面格式
+- 可以主动追问学生的理解，引导深入讨论
+
+# 正在阅读的文档：「${docTitle}」
+
+${truncated}`,
+				firstMessage: p.firstMessage,
 				voiceId: p.voiceId,
+				voiceSpeed: p.voiceSpeed,
+				voiceStability: p.voiceStability,
 			});
 
 			setVoiceMode({ active: true, docId, docTitle });
