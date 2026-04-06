@@ -7,7 +7,7 @@ import { RealtimeEvents, Scribe } from "@elevenlabs/client";
  */
 export class ElevenLabsScribeAdapter implements DictationAdapter {
 	private tokenEndpoint: string;
-	private languageCode: string;
+	private languageCode: string | undefined;
 	public disableInputDuringDictation: boolean;
 
 	constructor(options: {
@@ -16,7 +16,7 @@ export class ElevenLabsScribeAdapter implements DictationAdapter {
 		disableInputDuringDictation?: boolean;
 	}) {
 		this.tokenEndpoint = options.tokenEndpoint;
-		this.languageCode = options.languageCode ?? "en";
+		this.languageCode = options.languageCode;
 		this.disableInputDuringDictation =
 			options.disableInputDuringDictation ?? true;
 	}
@@ -120,7 +120,7 @@ export class ElevenLabsScribeAdapter implements DictationAdapter {
 			const connection = Scribe.connect({
 				token,
 				modelId: "scribe_v2_realtime",
-				languageCode: this.languageCode,
+				...(this.languageCode ? { languageCode: this.languageCode } : {}),
 				microphone: {
 					echoCancellation: true,
 					noiseSuppression: true,
