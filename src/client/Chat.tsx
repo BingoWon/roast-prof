@@ -393,7 +393,14 @@ const AssistantActionBar: FC = () => (
 				</TooltipIconButton>
 			</ActionBarPrimitive.Speak>
 		</AuiIf>
-		<AuiIf condition={(s) => !!s.message.speech}>
+		<AuiIf condition={(s) => s.message.speech?.status.type === "starting"}>
+			<ActionBarPrimitive.StopSpeaking asChild>
+				<TooltipIconButton tooltip="加载中...">
+					<Loader2 className="h-4 w-4 animate-spin" />
+				</TooltipIconButton>
+			</ActionBarPrimitive.StopSpeaking>
+		</AuiIf>
+		<AuiIf condition={(s) => s.message.speech?.status.type === "running"}>
 			<ActionBarPrimitive.StopSpeaking asChild>
 				<TooltipIconButton tooltip="停止朗读">
 					<VolumeOff className="h-4 w-4" />
