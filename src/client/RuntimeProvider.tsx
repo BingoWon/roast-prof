@@ -359,6 +359,11 @@ export const RuntimeProvider: FC<{ children: ReactNode }> = ({ children }) => {
 		[autoTTS, setAutoTTS],
 	);
 
+	const runtime = useRemoteThreadListRuntime({
+		runtimeHook: useMyRuntime,
+		adapter: threadListAdapter,
+	});
+
 	// ── Voice mode ────────────────────────────────────────────────────────
 	const [voiceMode, setVoiceMode] = useState<VoiceModeState>({
 		active: false,
@@ -375,9 +380,27 @@ export const RuntimeProvider: FC<{ children: ReactNode }> = ({ children }) => {
 				if (res.ok) docContent = await res.text();
 			} catch {}
 
+			// Summarize recent text conversation for voice context continuity
+			let chatSummary = "";
+			try {
+				const msgs = runtime.thread.getState().messages;
+				const recent = msgs.slice(-10);
+				if (recent.length > 0) {
+					chatSummary = recent
+						.map((m) => {
+							const text = m.content
+								.filter(
+									(p): p is { type: "text"; text: string } => p.type === "text",
+								)
+								.map((p) => p.text)
+								.join(" ");
+							return `${m.role === "user" ? "学生" : "导师"}：${text.slice(0, 200)}`;
+						})
+						.join("\n");
+				}
+			} catch {}
+
 			const p = PERSONAS[persona];
-			// ~12k chars ≈ ~3k tokens, well under ElevenLabs' recommended 2k token budget
-			// for prompt + doc combined
 			const truncated = docContent.slice(0, 12000);
 
 			voiceAdapter.configure({
@@ -391,7 +414,7 @@ export const RuntimeProvider: FC<{ children: ReactNode }> = ({ children }) => {
 
 # 正在阅读的文档：「${docTitle}」
 
-${truncated}`,
+${truncated}${chatSummary ? `\n\n# 之前的文字对话记录（供参考）\n${chatSummary}` : ""}`,
 				firstMessage: p.firstMessage,
 				voiceId: p.voiceId,
 				voiceSpeed: p.voiceSpeed,
@@ -400,7 +423,7 @@ ${truncated}`,
 
 			setVoiceMode({ active: true, docId, docTitle });
 		},
-		[persona],
+		[persona, runtime],
 	);
 
 	const exitVoiceMode = useCallback(() => {
@@ -411,11 +434,6 @@ ${truncated}`,
 		() => ({ voiceMode, enterVoiceMode, exitVoiceMode }),
 		[voiceMode, enterVoiceMode, exitVoiceMode],
 	);
-
-	const runtime = useRemoteThreadListRuntime({
-		runtimeHook: useMyRuntime,
-		adapter: threadListAdapter,
-	});
 
 	return (
 		<PersonaCtx value={personaCtx}>

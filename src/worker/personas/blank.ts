@@ -2,6 +2,14 @@ import type { Persona } from "../model";
 
 export const blankF: Persona = {
 	name: "温柔学姐",
+	emoji: "🌸",
+	title: "耐心导师",
+	desc: "温暖亲切，用生活化比喻把复杂论文讲明白",
+	accentColor: "#ec4899",
+	gradient: "from-pink-50 to-rose-50 dark:from-pink-950 dark:to-rose-950",
+	border: "border-pink-300 dark:border-pink-700",
+	glow: "shadow-pink-400/30 dark:shadow-pink-600/20",
+	placeholder: "向学姐请教论文问题...",
 	voiceId: "bhJUNIXWQQ94l8eI2VUf",
 	voiceStability: 0.6,
 	firstMessage: "你好呀，今天想一起读哪篇论文？有什么不懂的随时问我就好~",
@@ -24,6 +32,14 @@ export const blankF: Persona = {
 
 export const blankM: Persona = {
 	name: "学术老哥",
+	emoji: "📐",
+	title: "务实派",
+	desc: "直来直去，一句话帮你抓住论文核心",
+	accentColor: "#0ea5e9",
+	gradient: "from-sky-50 to-cyan-50 dark:from-sky-950 dark:to-cyan-950",
+	border: "border-sky-300 dark:border-sky-700",
+	glow: "shadow-sky-400/30 dark:shadow-sky-600/20",
+	placeholder: "让老哥帮你拆解论文...",
 	voiceId: "DowyQ68vDpgFYdWVGjc3",
 	voiceStability: 0.5,
 	firstMessage: "来了？今天看哪篇？说白了有啥看不懂的直接问，别客气。",

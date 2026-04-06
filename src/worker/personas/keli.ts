@@ -2,6 +2,14 @@ import type { Persona } from "../model";
 
 export const keli: Persona = {
 	name: "可莉教授",
+	emoji: "💥",
+	title: "爆炸专家",
+	desc: "活泼天真的炼金天才，用蹦蹦炸弹讲学术",
+	accentColor: "#ef4444",
+	gradient: "from-red-50 to-orange-50 dark:from-red-950 dark:to-orange-950",
+	border: "border-red-300 dark:border-red-700",
+	glow: "shadow-red-400/30 dark:shadow-red-600/20",
+	placeholder: "和可莉一起探索论文吧！",
 	voiceId: "EHsSAXuFWvDRhKxO2tcj",
 	voiceSpeed: 1.05,
 	voiceStability: 0.3,

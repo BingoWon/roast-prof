@@ -31,7 +31,7 @@ import {
 	X,
 } from "lucide-react";
 import { createContext, type FC, useEffect, useRef, useState } from "react";
-import type { PersonaId } from "../worker/model";
+import { PERSONAS, type PersonaId } from "../worker/model";
 import { ReasoningPart } from "./components/message/ReasoningPart";
 import type { Recipe } from "./components/RecipePanel";
 import { ToolCallFallback } from "./components/tools/ToolCallFallback";
@@ -102,60 +102,9 @@ const ComposerAttachment: FC = () => (
 	</AttachmentPrimitive.Root>
 );
 
-// ── Persona Definitions (client-side display config) ────────────────────────
+// ── Persona card list (derived from single source of truth in PERSONAS) ─────
 
-const PERSONA_CARDS: {
-	id: PersonaId;
-	emoji: string;
-	name: string;
-	title: string;
-	desc: string;
-	gradient: string;
-	border: string;
-	glow: string;
-}[] = [
-	{
-		id: "blank_f",
-		emoji: "🌸",
-		name: "温柔学姐",
-		title: "耐心导师",
-		desc: "温暖亲切，用生活化比喻把复杂论文讲明白",
-		gradient: "from-pink-50 to-rose-50 dark:from-pink-950 dark:to-rose-950",
-		border: "border-pink-300 dark:border-pink-700",
-		glow: "shadow-pink-400/30 dark:shadow-pink-600/20",
-	},
-	{
-		id: "blank_m",
-		emoji: "📐",
-		name: "学术老哥",
-		title: "务实派",
-		desc: "直来直去，一句话帮你抓住论文核心",
-		gradient: "from-sky-50 to-cyan-50 dark:from-sky-950 dark:to-cyan-950",
-		border: "border-sky-300 dark:border-sky-700",
-		glow: "shadow-sky-400/30 dark:shadow-sky-600/20",
-	},
-	{
-		id: "professor",
-		emoji: "⚡",
-		name: "暴躁教授",
-		title: "雷电将军",
-		desc: "尖酸刻薄的毒舌学者，永远对你不满意",
-		gradient:
-			"from-purple-100 to-indigo-50 dark:from-purple-950 dark:to-indigo-950",
-		border: "border-purple-300 dark:border-purple-700",
-		glow: "shadow-purple-400/30 dark:shadow-purple-600/20",
-	},
-	{
-		id: "keli",
-		emoji: "💥",
-		name: "可莉教授",
-		title: "爆炸专家",
-		desc: "活泼天真的炼金天才，用蹦蹦炸弹讲学术",
-		gradient: "from-red-50 to-orange-50 dark:from-red-950 dark:to-orange-950",
-		border: "border-red-300 dark:border-red-700",
-		glow: "shadow-red-400/30 dark:shadow-red-600/20",
-	},
-];
+const PERSONA_IDS: PersonaId[] = ["blank_f", "blank_m", "professor", "keli"];
 
 // ── Persona Selection (replaces old ThreadWelcome) ──────────────────────────
 
@@ -174,20 +123,21 @@ const PersonaSelect: FC = () => {
 			</div>
 
 			<div className="flex w-full flex-col gap-3">
-				{PERSONA_CARDS.map((card) => {
-					const selected = persona === card.id;
+				{PERSONA_IDS.map((id) => {
+					const p = PERSONAS[id];
+					const selected = persona === id;
 					return (
 						<button
-							key={card.id}
+							key={id}
 							type="button"
-							onClick={() => setPersona(card.id)}
+							onClick={() => setPersona(id)}
 							className={`
 								group relative w-full flex items-center gap-4 rounded-2xl p-4
-								bg-gradient-to-r ${card.gradient}
+								bg-gradient-to-r ${p.gradient}
 								border-2 transition-all duration-200 cursor-pointer
 								${
 									selected
-										? `${card.border} shadow-lg ${card.glow} scale-[1.02]`
+										? `${p.border} shadow-lg ${p.glow} scale-[1.02]`
 										: "border-transparent hover:border-zinc-200 dark:hover:border-zinc-700 hover:shadow-md"
 								}
 							`}
@@ -199,16 +149,7 @@ const PersonaSelect: FC = () => {
 									transition-all duration-200
 									${selected ? "bg-current opacity-100" : "opacity-0"}
 								`}
-								style={{
-									color:
-										card.id === "blank_f"
-											? "#ec4899"
-											: card.id === "blank_m"
-												? "#0ea5e9"
-												: card.id === "professor"
-													? "#a855f7"
-													: "#ef4444",
-								}}
+								style={{ color: p.accentColor }}
 							/>
 
 							{/* Emoji avatar */}
@@ -222,21 +163,21 @@ const PersonaSelect: FC = () => {
 									ring-1 ring-black/5 dark:ring-white/10
 								`}
 							>
-								{card.emoji}
+								{p.emoji}
 							</div>
 
 							{/* Info */}
 							<div className="flex-1 text-left min-w-0">
 								<div className="flex items-center gap-2">
 									<span className="font-bold text-zinc-900 dark:text-zinc-100">
-										{card.name}
+										{p.name}
 									</span>
 									<span className="text-[10px] px-1.5 py-0.5 rounded-full bg-black/5 dark:bg-white/10 text-zinc-500 dark:text-zinc-400 font-medium">
-										{card.title}
+										{p.title}
 									</span>
 								</div>
 								<p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5 leading-relaxed">
-									{card.desc}
+									{p.desc}
 								</p>
 							</div>
 
@@ -268,13 +209,6 @@ const PersonaSelect: FC = () => {
 
 // ── Composer ──────────────────────────────────────────────────────────────────
 
-const PERSONA_PLACEHOLDERS: Record<PersonaId, string> = {
-	blank_f: "向学姐请教论文问题...",
-	blank_m: "让老哥帮你拆解论文...",
-	professor: "你确定准备好面对教授了？",
-	keli: "和可莉一起探索论文吧！",
-};
-
 const Composer: FC = () => {
 	const { persona } = usePersona();
 	return (
@@ -286,7 +220,7 @@ const Composer: FC = () => {
 					/>
 				</div>
 				<ComposerPrimitive.Input
-					placeholder={PERSONA_PLACEHOLDERS[persona]}
+					placeholder={PERSONAS[persona].placeholder}
 					className="mb-1 max-h-32 min-h-14 w-full resize-none bg-transparent px-4 pt-2 pb-3 text-sm outline-none text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 dark:placeholder:text-zinc-500 focus-visible:ring-0"
 					rows={1}
 					autoFocus
@@ -306,7 +240,7 @@ const PersonaSwitcher: FC = () => {
 	const ref = useRef<HTMLDivElement>(null);
 	const aui = useAui();
 	const { persona, setPersona } = usePersona();
-	const current = PERSONA_CARDS.find((c) => c.id === persona);
+	const current = PERSONAS[persona];
 
 	// Close on outside click
 	useEffect(() => {
@@ -344,9 +278,9 @@ const PersonaSwitcher: FC = () => {
 				type="button"
 				onClick={() => setOpen((v) => !v)}
 				className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition-all hover:bg-zinc-100 dark:hover:bg-zinc-700 active:scale-95 cursor-pointer text-base"
-				title={`当前角色：${current?.name ?? ""}`}
+				title={`当前角色：${current.name}`}
 			>
-				{current?.emoji ?? "⚡"}
+				{current.emoji}
 			</button>
 
 			{open && (
@@ -354,25 +288,26 @@ const PersonaSwitcher: FC = () => {
 					<div className="px-2 py-1.5 text-[10px] font-medium text-zinc-400 dark:text-zinc-500 uppercase tracking-wider">
 						切换角色
 					</div>
-					{PERSONA_CARDS.map((card) => {
-						const active = persona === card.id;
+					{PERSONA_IDS.map((id) => {
+						const c = PERSONAS[id];
+						const active = persona === id;
 						return (
 							<button
-								key={card.id}
+								key={id}
 								type="button"
-								onClick={() => handleSelect(card.id)}
+								onClick={() => handleSelect(id)}
 								className={`
 									w-full flex items-center gap-2.5 px-2 py-2 rounded-lg text-left transition-colors cursor-pointer
 									${active ? "bg-zinc-100 dark:bg-zinc-700" : "hover:bg-zinc-50 dark:hover:bg-zinc-700/50"}
 								`}
 							>
-								<span className="text-lg shrink-0">{card.emoji}</span>
+								<span className="text-lg shrink-0">{c.emoji}</span>
 								<div className="min-w-0 flex-1">
 									<div className="text-xs font-medium text-zinc-800 dark:text-zinc-200 truncate">
-										{card.name}
+										{c.name}
 									</div>
 									<div className="text-[10px] text-zinc-400 dark:text-zinc-500 truncate">
-										{card.desc}
+										{c.desc}
 									</div>
 								</div>
 								{active && (

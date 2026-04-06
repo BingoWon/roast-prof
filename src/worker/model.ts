@@ -8,11 +8,22 @@ import { blankF, blankM, keli, professor } from "./personas";
 export type PersonaId = "blank_f" | "blank_m" | "professor" | "keli";
 
 export interface Persona {
+	// Display
 	name: string;
+	emoji: string;
+	title: string;
+	desc: string;
+	accentColor: string;
+	gradient: string;
+	border: string;
+	glow: string;
+	placeholder: string;
+	// Voice
 	voiceId: string;
 	voiceSpeed?: number;
 	voiceStability?: number;
 	firstMessage: string;
+	// LLM
 	prompt: string;
 }
 

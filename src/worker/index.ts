@@ -177,11 +177,11 @@ app.post("/api/tts", async (c) => {
 // ── ElevenLabs Conversational AI (signed URL for voice mode) ───────────────
 app.get("/api/voice-signed-url", async (c) => {
 	const userId = await requireUserId(c);
-	if (!userId) return c.json({ error: "未���权" }, 401);
+	if (!userId) return c.json({ error: "未授权" }, 401);
 
 	const apiKey = c.env.ELEVENLABS_API_KEY;
 	const agentId = c.env.ELEVENLABS_AGENT_ID;
-	if (!apiKey || !agentId) return c.json({ error: "语音对话服务未���置" }, 500);
+	if (!apiKey || !agentId) return c.json({ error: "语音对话服务未配置" }, 500);
 
 	const res = await fetch(
 		`https://api.elevenlabs.io/v1/convai/conversation/get-signed-url?agent_id=${agentId}`,

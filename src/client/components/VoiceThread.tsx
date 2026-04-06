@@ -8,18 +8,11 @@ import {
 } from "@assistant-ui/react";
 import { ArrowDown, X } from "lucide-react";
 import { type FC, useEffect, useRef } from "react";
-import type { PersonaId } from "../../worker/model";
+import { PERSONAS } from "../../worker/model";
 import { usePersona } from "../RuntimeProvider";
 import { MarkdownText } from "./ui/markdown-text";
 import { TooltipIconButton } from "./ui/tooltip-icon-button";
 import { VoiceControlCenter } from "./voice/VoiceOrb";
-
-const PERSONA_DISPLAY: Record<PersonaId, { emoji: string; name: string }> = {
-	blank_f: { emoji: "🌸", name: "温柔学姐" },
-	blank_m: { emoji: "📐", name: "学术老哥" },
-	professor: { emoji: "⚡", name: "暴躁教授" },
-	keli: { emoji: "💥", name: "可莉教授" },
-};
 
 // ── VoiceThread ─────────────────────────────────────────────────────────────
 
@@ -28,7 +21,7 @@ export const VoiceThread: FC<{
 	onExit: () => void;
 }> = ({ docTitle, onExit }) => {
 	const { persona } = usePersona();
-	const p = PERSONA_DISPLAY[persona];
+	const p = PERSONAS[persona];
 
 	return (
 		<ThreadPrimitive.Root
@@ -94,12 +87,14 @@ const AutoConnect: FC<{ onDisconnect: () => void }> = ({ onDisconnect }) => {
 		}
 	}, [voiceState, controls]);
 
-	// Exit voice mode when session ends (user clicked disconnect)
+	// Exit voice mode when session ends
+	const status = voiceState?.status;
 	useEffect(() => {
-		if (didConnect.current && voiceState?.status.type === "ended") {
+		if (didConnect.current && status?.type === "ended") {
+			if (status.reason === "error") console.warn("[Voice] 连接异常断开");
 			onDisconnect();
 		}
-	}, [voiceState?.status.type, onDisconnect]);
+	}, [status, onDisconnect]);
 
 	return null;
 };
@@ -108,7 +103,7 @@ const AutoConnect: FC<{ onDisconnect: () => void }> = ({ onDisconnect }) => {
 
 const VoiceWelcome: FC<{ docTitle: string }> = ({ docTitle }) => {
 	const { persona } = usePersona();
-	const p = PERSONA_DISPLAY[persona];
+	const p = PERSONAS[persona];
 	return (
 		<div className="mx-auto my-auto flex w-full max-w-sm flex-grow flex-col items-center justify-center gap-4 px-4 text-center">
 			<div className="text-5xl">{p.emoji}</div>

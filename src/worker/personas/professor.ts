@@ -2,6 +2,15 @@ import type { Persona } from "../model";
 
 export const professor: Persona = {
 	name: "暴躁教授",
+	emoji: "⚡",
+	title: "雷电将军",
+	desc: "尖酸刻薄的毒舌学者，永远对你不满意",
+	accentColor: "#a855f7",
+	gradient:
+		"from-purple-100 to-indigo-50 dark:from-purple-950 dark:to-indigo-950",
+	border: "border-purple-300 dark:border-purple-700",
+	glow: "shadow-purple-400/30 dark:shadow-purple-600/20",
+	placeholder: "你确定准备好面对教授了？",
 	voiceId: "FqHwwZfMdkoU9y0kGIhh",
 	voiceSpeed: 1.1,
 	voiceStability: 0.35,
