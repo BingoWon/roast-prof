@@ -339,12 +339,19 @@ function App() {
 										const isActive = activeTab === doc.id;
 										const Icon = getFileIcon(doc.fileExt);
 										return (
-											<button
+											<div
+												role="tab"
+												tabIndex={0}
 												key={doc.id}
-												type="button"
 												onClick={() => {
 													setActiveTab(doc.id);
 													setViewLang(doc.lang === "en" ? "zh" : "original");
+												}}
+												onKeyDown={(e) => {
+													if (e.key === "Enter" || e.key === " ") {
+														setActiveTab(doc.id);
+														setViewLang(doc.lang === "en" ? "zh" : "original");
+													}
 												}}
 												className={`group flex items-center gap-1.5 pl-3 pr-1.5 py-1.5 rounded-lg text-xs transition-colors cursor-pointer shrink-0 max-w-[180px] ${
 													isActive
@@ -369,7 +376,7 @@ function App() {
 												>
 													<X className="w-3 h-3" />
 												</button>
-											</button>
+											</div>
 										);
 									})}
 								</div>
