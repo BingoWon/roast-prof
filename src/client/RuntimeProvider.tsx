@@ -415,7 +415,8 @@ export const RuntimeProvider: FC<{ children: ReactNode }> = ({ children }) => {
 # 正在阅读的文档：「${docTitle}」
 
 ${truncated}${chatSummary ? `\n\n# 之前的文字对话记录（供参考）\n${chatSummary}` : ""}`,
-				firstMessage: p.firstMessage,
+				firstMessage:
+					p.firstMessages[Math.floor(Math.random() * p.firstMessages.length)],
 				voiceId: p.voiceId,
 				voiceSpeed: p.voiceSpeed,
 				voiceStability: p.voiceStability,
@@ -427,13 +428,17 @@ ${truncated}${chatSummary ? `\n\n# 之前的文字对话记录（供参考）\n$
 	);
 
 	const exitVoiceMode = useCallback(() => {
-		// Disconnect voice session before switching mode to prevent reconnect race
+		console.log("[VoiceMode] Exiting...");
 		try {
 			const voice = runtime.thread.getState().voice;
+			console.log("[VoiceMode] Current voice state:", voice?.status.type);
 			if (voice && voice.status.type !== "ended") {
+				console.log("[VoiceMode] Disconnecting voice...");
 				runtime.thread.disconnectVoice();
 			}
-		} catch {}
+		} catch (e) {
+			console.warn("[VoiceMode] Disconnect error:", e);
+		}
 		setVoiceMode({ active: false, docId: null, docTitle: null });
 	}, [runtime]);
 

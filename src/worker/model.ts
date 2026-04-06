@@ -22,7 +22,7 @@ export interface Persona {
 	voiceId: string;
 	voiceSpeed?: number;
 	voiceStability?: number;
-	firstMessage: string;
+	firstMessages: string[];
 	// LLM
 	prompt: string;
 }

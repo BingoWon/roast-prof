@@ -15,6 +15,11 @@ export interface VoiceAdapterOptions {
 	overrides?: VoiceSessionOverrides;
 }
 
+/** Strip ElevenLabs mood/action tags: [sigh], [laughs], [背景音乐] etc. */
+function stripMoodTags(text: string): string {
+	return text.replace(/\[[^\]]*\]/g, "").trim();
+}
+
 export class ElevenLabsVoiceAdapter implements RealtimeVoiceAdapter {
 	private opts: VoiceAdapterOptions;
 
@@ -22,7 +27,6 @@ export class ElevenLabsVoiceAdapter implements RealtimeVoiceAdapter {
 		this.opts = opts;
 	}
 
-	/** Update overrides dynamically before connect(). */
 	configure(overrides: VoiceSessionOverrides) {
 		this.opts.overrides = overrides;
 	}
@@ -32,6 +36,9 @@ export class ElevenLabsVoiceAdapter implements RealtimeVoiceAdapter {
 
 		return createVoiceSession(connectOpts, async (ctx) => {
 			let volumeInterval: ReturnType<typeof setInterval> | null = null;
+			// Dedup: track last emitted text per role to avoid repeats
+			const lastEmitted = { user: "", assistant: "" };
+
 			const cleanup = () => {
 				if (volumeInterval) {
 					clearInterval(volumeInterval);
@@ -50,7 +57,7 @@ export class ElevenLabsVoiceAdapter implements RealtimeVoiceAdapter {
 				const { signedUrl } = (await res.json()) as {
 					signedUrl: string;
 				};
-				console.log("[Voice] Starting session...");
+				console.log("[Voice] Connecting WebSocket...");
 
 				const conversation = await VoiceConversation.startSession({
 					signedUrl,
@@ -86,7 +93,8 @@ export class ElevenLabsVoiceAdapter implements RealtimeVoiceAdapter {
 						}, 50);
 					},
 
-					onDisconnect: () => {
+					onDisconnect: (details) => {
+						console.log("[Voice] Disconnected:", details);
 						cleanup();
 						ctx.end("finished");
 					},
@@ -98,20 +106,32 @@ export class ElevenLabsVoiceAdapter implements RealtimeVoiceAdapter {
 					},
 
 					onModeChange: ({ mode }) => {
+						console.log("[Voice] Mode:", mode);
 						ctx.emitMode(mode === "speaking" ? "speaking" : "listening");
 					},
 
 					onMessage: ({ source, message }) => {
+						const role = source === "ai" ? "assistant" : "user";
+						const clean = stripMoodTags(message);
+						if (!clean) return;
+
+						// Dedup: skip if same as last emitted for this role
+						if (lastEmitted[role] === clean) return;
+						lastEmitted[role] = clean;
+
 						ctx.emitTranscript({
-							role: source === "ai" ? "assistant" : "user",
-							text: message,
+							role,
+							text: clean,
 							isFinal: true,
 						});
 					},
 				});
 
 				return {
-					disconnect: () => conversation.endSession(),
+					disconnect: () => {
+						console.log("[Voice] User disconnect requested");
+						conversation.endSession();
+					},
 					mute: () => conversation.setVolume({ volume: 0 }),
 					unmute: () => conversation.setVolume({ volume: 1 }),
 				};

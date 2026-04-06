@@ -81,6 +81,7 @@ const AutoConnect: FC<{ onDisconnect: () => void }> = ({ onDisconnect }) => {
 	// Connect once on mount
 	useEffect(() => {
 		if (!didConnect.current && !voiceState && controls) {
+			console.log("[AutoConnect] Initiating first connect");
 			didConnect.current = true;
 			controls.connect();
 		}
@@ -89,8 +90,9 @@ const AutoConnect: FC<{ onDisconnect: () => void }> = ({ onDisconnect }) => {
 	// Exit voice mode when session ends
 	const status = voiceState?.status;
 	useEffect(() => {
-		if (didConnect.current && status?.type === "ended") {
-			if (status.reason === "error") console.warn("[Voice] 连接异常断开");
+		if (!didConnect.current) return;
+		if (status?.type === "ended") {
+			console.log("[AutoConnect] Session ended, reason:", status.reason);
 			onDisconnect();
 		}
 	}, [status, onDisconnect]);
