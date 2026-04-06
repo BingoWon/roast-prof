@@ -445,8 +445,8 @@ function App() {
 								</div>
 							)}
 							{activeDoc && (
-								<DocumentViewer
-									docId={activeDoc.id}
+								<DocViewerWithVoice
+									doc={activeDoc}
 									viewLang={activeDoc.lang === "en" ? viewLang : "original"}
 									highlights={highlights.get(activeDoc.id) ?? []}
 									scrollToHlId={scrollToHl}
@@ -544,6 +544,32 @@ const UrlSync: FC<{
 }> = ({ sidebarTab, setSidebarTab }) => {
 	useUrlSync(sidebarTab, setSidebarTab);
 	return null;
+};
+
+// ── Document Viewer with Voice (bridges voice context into DocumentViewer) ──
+
+const DocViewerWithVoice: FC<{
+	doc: OpenDoc;
+	viewLang: "original" | "zh";
+	highlights: HighlightItem[];
+	scrollToHlId?: string | null;
+	onScrollToHlDone?: () => void;
+	onAddHighlight?: (text: string, color: string) => void;
+	onClearHighlights?: () => void;
+}> = ({ doc, ...rest }) => {
+	const { voiceMode, enterVoiceMode, exitVoiceMode } = useVoiceMode();
+	const active = voiceMode.active && voiceMode.docId === doc.id;
+
+	return (
+		<DocumentViewer
+			docId={doc.id}
+			{...rest}
+			onVoiceRead={() =>
+				active ? exitVoiceMode() : enterVoiceMode(doc.id, doc.title)
+			}
+			isVoiceActive={active}
+		/>
+	);
 };
 
 // ── Voice Button (lives inside RuntimeProvider for context access) ──────────

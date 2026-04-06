@@ -8,7 +8,7 @@ import {
 	useVoiceVolume,
 } from "@assistant-ui/react";
 import { ArrowDown, Mic, MicOff, PhoneOff, X } from "lucide-react";
-import type { FC } from "react";
+import { type FC, useEffect } from "react";
 import type { PersonaId } from "../../worker/model";
 import { usePersona } from "../RuntimeProvider";
 import { MarkdownText } from "./ui/markdown-text";
@@ -104,16 +104,37 @@ const VoiceWelcome: FC<{ persona: PersonaId; docTitle: string }> = ({
 	);
 };
 
+// ── Auto-connect on mount ────────────────────────────────────────────────────
+
+const AutoConnect: FC = () => {
+	const controls = useVoiceControls();
+	const voiceState = useVoiceState();
+
+	useEffect(() => {
+		// Auto-connect once when voice mode activates (voice is null = not yet connected)
+		if (!voiceState && controls) {
+			controls.connect();
+		}
+	}, [voiceState, controls]);
+
+	return null;
+};
+
 // ── Controls ────────────────────────────────────────────────────────────────
 
 const VoiceControlCenter: FC<{ color: string }> = ({ color }) => (
 	<div className="flex flex-col items-center gap-4">
+		<AutoConnect />
 		<VoicePulse color={color} />
 		<VoiceWaveform />
 
 		<div className="flex items-center gap-3">
-			{/* Idle / Ended → auto-connects, show nothing or "connecting" */}
-			<AuiIf condition={(s) => s.thread.voice?.status.type === "starting"}>
+			{/* Not connected yet or starting */}
+			<AuiIf
+				condition={(s) =>
+					s.thread.voice == null || s.thread.voice.status.type === "starting"
+				}
+			>
 				<span className="text-xs text-zinc-400 dark:text-zinc-500 animate-pulse">
 					连接中...
 				</span>
