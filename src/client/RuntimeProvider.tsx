@@ -116,6 +116,11 @@ const attachmentAdapter: AttachmentAdapter = {
 
 const threadPersonaMap = new Map<string, PersonaId>();
 
+/** Update cached persona for a thread (called when user switches persona). */
+export function setThreadPersona(remoteId: string, persona: PersonaId) {
+	threadPersonaMap.set(remoteId, persona);
+}
+
 const threadListAdapter: RemoteThreadListAdapter = {
 	async list() {
 		const res = await fetch("/api/threads");

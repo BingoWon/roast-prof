@@ -64,6 +64,19 @@ export async function updateThreadTitle(
 		.where(and(eq(threads.id, id), eq(threads.userId, userId)));
 }
 
+export async function updateThreadPersona(
+	db: DbClient,
+	id: string,
+	userId: string,
+	persona: PersonaId,
+) {
+	const now = Math.floor(Date.now() / 1000);
+	return db
+		.update(threads)
+		.set({ persona, updatedAt: now })
+		.where(and(eq(threads.id, id), eq(threads.userId, userId)));
+}
+
 export async function getThread(db: DbClient, id: string) {
 	const [row] = await db
 		.select()

@@ -17,6 +17,7 @@ import {
 	getThreadsByUserId,
 	saveMessages,
 	touchThread,
+	updateThreadPersona,
 	updateThreadTitle,
 } from "./db";
 import { log } from "./log";
@@ -77,9 +78,15 @@ app.get("/api/threads", async (c) => {
 app.patch("/api/threads/:id", async (c) => {
 	const userId = await requireUserId(c);
 	if (!userId) return c.json({ error: "未授权" }, 401);
-	const { title } = await c.req.json<{ title: string }>();
+	const body = await c.req.json<{ title?: string; persona?: string }>();
 	const db = createDb(c.env.DB);
-	await updateThreadTitle(db, c.req.param("id"), userId, title);
+	const threadId = c.req.param("id");
+	if (body.title) {
+		await updateThreadTitle(db, threadId, userId, body.title);
+	}
+	if (body.persona && isValidPersona(body.persona)) {
+		await updateThreadPersona(db, threadId, userId, body.persona);
+	}
 	return c.json({ ok: true });
 });
 

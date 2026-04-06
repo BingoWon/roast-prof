@@ -38,7 +38,7 @@ import { ToolCallFallback } from "./components/tools/ToolCallFallback";
 import { Button } from "./components/ui/button";
 import { MarkdownText } from "./components/ui/markdown-text";
 import { TooltipIconButton } from "./components/ui/tooltip-icon-button";
-import { useAutoTTS, usePersona } from "./RuntimeProvider";
+import { setThreadPersona, useAutoTTS, usePersona } from "./RuntimeProvider";
 
 // ── Recipe Update Context ────────────────────────────────────────────────────
 
@@ -326,8 +326,16 @@ const PersonaSwitcher: FC = () => {
 		}
 		setPersona(id);
 		setOpen(false);
-		// Switching persona = start a new thread
-		aui.threads().switchToNewThread();
+		// Update local cache + persist to DB
+		const remoteId = aui.threadListItem().getState().remoteId;
+		if (remoteId) {
+			setThreadPersona(remoteId, id);
+			fetch(`/api/threads/${remoteId}`, {
+				method: "PATCH",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ persona: id }),
+			}).catch(() => {});
+		}
 	};
 
 	return (
@@ -344,7 +352,7 @@ const PersonaSwitcher: FC = () => {
 			{open && (
 				<div className="absolute bottom-full left-0 mb-2 w-56 rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 shadow-xl p-1.5 z-50 animate-in fade-in slide-in-from-bottom-2 duration-150">
 					<div className="px-2 py-1.5 text-[10px] font-medium text-zinc-400 dark:text-zinc-500 uppercase tracking-wider">
-						切换角色（新对话）
+						切换角色
 					</div>
 					{PERSONA_CARDS.map((card) => {
 						const active = persona === card.id;
