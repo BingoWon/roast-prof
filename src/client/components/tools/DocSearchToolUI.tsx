@@ -169,7 +169,7 @@ const SearchCard: FC<{
 								addResult({
 									action: "auto",
 									message:
-										"用户让你帮他选择，请自行决定最佳查询和参数来执行 doc_search。",
+										"用户让你帮他选择，请自行决定最佳查询和参数来执行 doc_rag_search。",
 								} as SuggestResult)
 							}
 							className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition cursor-pointer"
@@ -185,7 +185,7 @@ const SearchCard: FC<{
 									action: "confirm",
 									query: activeQuery as string,
 									topK,
-									message: `用户确认使用查询「${activeQuery}」检索 ${topK} 条结果。请调用 doc_search。`,
+									message: `用户确认使用查询「${activeQuery}」检索 ${topK} 条结果。请调用 doc_rag_search。`,
 								} as SuggestResult)
 							}
 							className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium transition ${
@@ -202,7 +202,7 @@ const SearchCard: FC<{
 							onClick={() =>
 								addResult({
 									action: "skip",
-									message: "用户不想被确认，请直接执行 doc_search。",
+									message: "用户不想被确认，请直接执行 doc_rag_search。",
 								} as SuggestResult)
 							}
 							className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium text-zinc-400 dark:text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition cursor-pointer"
@@ -228,7 +228,7 @@ type SearchResult = {
 };
 
 export const DocSearchToolUI = makeAssistantToolUI<SearchArgs, SearchResult>({
-	toolName: "doc_search",
+	toolName: "doc_rag_search",
 	render: ({ result, status }) => {
 		if (status.type === "running") {
 			return (

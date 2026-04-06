@@ -170,9 +170,9 @@ export function createDocTools(opts: {
 			// No execute — tool blocks until frontend calls addToolResult
 		}),
 
-		doc_search: tool({
+		doc_rag_search: tool({
 			description:
-				"文档检索执行。在用户确认检索参数后调用，或用户明确要求直接搜索文档时调用。不传 docIds 则搜索全部文档，传入则只搜索指定文档。",
+				"对用户个人文档库执行 RAG 语义检索（非互联网搜索）。文档按 ~1500 字/块、128 字重叠切分并向量化，返回最相关的 chunk。不传 docIds 则搜索全部文档。",
 			inputSchema: zodSchema(
 				z.object({
 					query: z.string().describe("检索查询"),
