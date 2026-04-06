@@ -123,6 +123,10 @@ app.post("/api/threads/:id/voice-messages", async (c) => {
 	}>();
 
 	if (msgs?.length) {
+		// Check if thread had any messages before saving (for title generation)
+		const existingMsgs = await getMessagesByThreadId(db, threadId);
+		const hadMessages = existingMsgs.length > 0;
+
 		const now = Math.floor(Date.now() / 1000);
 		await saveMessages(
 			db,
@@ -135,6 +139,12 @@ app.post("/api/threads/:id/voice-messages", async (c) => {
 			})),
 		);
 		await touchThread(db, threadId, userId);
+
+		// Auto-generate title if this is the first content in the thread
+		if (!hadMessages) {
+			// biome-ignore lint/suspicious/noExplicitAny: wire format
+			maybeAutoTitle(c.executionCtx, c.env, db, threadId, userId, msgs as any);
+		}
 	}
 
 	return c.json({ ok: true });
@@ -486,6 +496,37 @@ async function generateLLMTitle(env: Env, prompt: string): Promise<string> {
 	return title.trim().replace(/["""''「」『』。，！？、：；]/g, "");
 }
 
+/** Extract user text from wire messages and auto-generate a thread title
+ *  if the text is non-empty. Fire-and-forget via waitUntil. */
+function maybeAutoTitle(
+	ctx: { waitUntil: (p: Promise<unknown>) => void },
+	env: Env,
+	db: ReturnType<typeof createDb>,
+	threadId: string,
+	userId: string,
+	wireMsgs: { role: string; parts?: { type: string; text?: string }[] }[],
+) {
+	const firstText = wireMsgs
+		.filter((m) => m.role === "user")
+		.flatMap((m) =>
+			(m.parts ?? []).filter((p) => p.type === "text").map((p) => p.text ?? ""),
+		)
+		.join(" ")
+		.trim()
+		.slice(0, 200);
+	if (!firstText) return;
+	ctx.waitUntil(
+		generateLLMTitle(
+			env,
+			`为以下用户消息生成简洁中文标题，4-8个字，无标点无引号，只回复标题：\n${firstText}`,
+		)
+			.then(async (title) => {
+				if (title) await updateThreadTitle(db, threadId, userId, title);
+			})
+			.catch(() => {}),
+	);
+}
+
 // ── Memories (proxy to Mem0 Cloud) ──────────────────────────────────────────
 
 app.get("/api/memories", async (c) => {
@@ -673,25 +714,17 @@ app.post("/api/chat", async (c) => {
 		// ── Auto-generate title on first message (fire-and-forget) ──────────
 		const userMessages = messages.filter((m: WireMessage) => m.role === "user");
 		if (threadId && userId && userMessages.length === 1) {
-			const firstText = userMessages[0].parts
-				?.filter((p: { type: string }) => p.type === "text")
-				.map((p: { text?: string }) => p.text ?? "")
-				.join(" ")
-				?.slice(0, 200);
-			if (firstText) {
-				c.executionCtx.waitUntil(
-					generateLLMTitle(
-						c.env,
-						`为以下用户消息生成简洁中文标题，4-8个字，无标点无引号，只回复标题：\n${firstText}`,
-					)
-						.then(async (title) => {
-							if (title) {
-								await updateThreadTitle(db, threadId, userId, title);
-							}
-						})
-						.catch(() => {}),
-				);
-			}
+			maybeAutoTitle(
+				c.executionCtx,
+				c.env,
+				db,
+				threadId,
+				userId,
+				userMessages as {
+					role: string;
+					parts?: { type: string; text?: string }[];
+				}[],
+			);
 		}
 
 		// ── Retrieve relevant memories ───────────────────────────────────────
@@ -718,9 +751,14 @@ app.post("/api/chat", async (c) => {
 		const tz = c.req.header("x-timezone") || "Asia/Shanghai";
 		const now = new Date();
 		const timeStr = now.toLocaleString("zh-CN", { timeZone: tz });
+		const autoTTS = c.req.header("x-auto-tts") === "1";
 		let systemPrompt =
 			`${getSystemPrompt(persona)}\n\n当前时间：${timeStr}` +
 			formatMemoriesForPrompt(retrievedMemories);
+		if (autoTTS) {
+			systemPrompt +=
+				"\n\n⚠️ 用户已开启自动朗读模式。你的最终输出应尽可能使用纯文本，避免 markdown 格式（如加粗、列表、代码块等），因为这些格式朗读效果不佳。用自然的口语化表达，适当分段即可。";
+		}
 		if (docList.length > 0) {
 			const readyDocs = docList.filter((d) => d.status === "ready");
 			if (readyDocs.length > 0) {
@@ -768,31 +806,30 @@ app.post("/api/chat", async (c) => {
 
 		// ── Extract memories concurrently (fire-and-forget, async on Mem0) ──
 		if (userId && c.env.MEM0_API_KEY) {
-			c.executionCtx.waitUntil(
-				addMemories(
-					c.env,
-					messages
-						.filter(
-							(m: WireMessage) => m.role === "user" || m.role === "assistant",
-						)
-						.slice(-6)
-						.map((m: WireMessage) => ({
-							role: m.role as string,
-							content:
-								m.parts
-									?.filter((p: { type: string }) => p.type === "text")
-									.map((p: { text?: string }) => p.text ?? "")
-									.join(" ") ?? "",
-						})),
-					userId,
-				).catch((e) => {
-					log.error({
-						module: "chat",
-						msg: "memory extraction failed",
-						error: String(e),
-					});
-				}),
-			);
+			const memMsgs = messages
+				.filter((m: WireMessage) => m.role === "user" || m.role === "assistant")
+				.slice(-6)
+				.map((m: WireMessage) => ({
+					role: m.role as string,
+					content:
+						m.parts
+							?.filter((p: { type: string }) => p.type === "text")
+							.map((p: { text?: string }) => p.text ?? "")
+							.join(" ")
+							.trim() ?? "",
+				}))
+				.filter((m) => m.content.length > 0);
+			if (memMsgs.length > 0) {
+				c.executionCtx.waitUntil(
+					addMemories(c.env, memMsgs, userId).catch((e) => {
+						log.error({
+							module: "chat",
+							msg: "memory extraction failed",
+							error: String(e),
+						});
+					}),
+				);
+			}
 		}
 
 		// ── Stream chat response ─────────────────────────────────────────────

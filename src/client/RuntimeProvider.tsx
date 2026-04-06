@@ -40,6 +40,13 @@ import { SaveMemoryToolUI } from "./components/tools/SaveMemoryToolUI";
 import { SearchToolUI } from "./components/tools/SearchToolUI";
 import { ElevenLabsScribeAdapter } from "./lib/elevenlabs-scribe-adapter";
 import { ElevenLabsTTSAdapter } from "./lib/elevenlabs-tts-adapter";
+import type { VoiceTranscript } from "./lib/elevenlabs-voice-adapter";
+import {
+	CHUNK_GAP_MS,
+	fetchTTSBlob,
+	playBlob,
+	SENTENCE_RE,
+} from "./lib/tts-utils";
 
 // ── Persona Context (per-thread persona, set at thread creation) ──────────
 
@@ -68,15 +75,10 @@ export interface VoiceModeState {
 	systemPrompt: string | null;
 }
 
-interface VoiceTranscriptItem {
-	role: "user" | "assistant";
-	text: string;
-}
-
 const VoiceModeCtx = createContext<{
 	voiceMode: VoiceModeState;
 	enterVoiceMode: (docId: string, docTitle: string) => void;
-	exitVoiceMode: (voiceMessages?: VoiceTranscriptItem[]) => void;
+	exitVoiceMode: (voiceMessages?: VoiceTranscript[]) => void;
 }>({
 	voiceMode: { active: false, docId: null, docTitle: null, systemPrompt: null },
 	enterVoiceMode: () => {},
@@ -95,14 +97,17 @@ const scribeAdapter = new ElevenLabsScribeAdapter({
 
 const ttsAdapter = new ElevenLabsTTSAdapter({ endpoint: "/api/tts" });
 
-const stableAdapters = {
+const runtimeAdapters = {
 	dictation: scribeAdapter,
 	speech: ttsAdapter,
 };
 
 /** Voice messages pending merge into text chat. Module-level to bridge
  *  between RuntimeProvider (writer) and useMyRuntime (reader). */
-let pendingVoiceMsgs: VoiceTranscriptItem[] | null = null;
+let pendingVoiceMsgs: VoiceTranscript[] | null = null;
+
+/** Module-level autoTTS flag readable by transport headers. */
+let autoTTSFlag = true;
 
 // ── Attachment Adapter ──────────────────────────────────────────────────────
 
@@ -316,6 +321,7 @@ function useMyRuntime() {
 						"x-persona": personaRef.current,
 						"x-timezone": Intl.DateTimeFormat().resolvedOptions().timeZone,
 						"x-active-doc": sessionStorage.getItem("center:activeTab") ?? "",
+						"x-auto-tts": autoTTSFlag ? "1" : "0",
 					};
 				},
 			}),
@@ -384,7 +390,7 @@ function useMyRuntime() {
 	}, [voiceMode.active, chat.messages, chat.setMessages, aui]);
 
 	return useAISDKRuntime(chat, {
-		adapters: stableAdapters,
+		adapters: runtimeAdapters,
 	});
 }
 
@@ -413,13 +419,16 @@ export const RuntimeProvider: FC<{ children: ReactNode }> = ({ children }) => {
 
 	const [autoTTS, setAutoTTSRaw] = useState(() => {
 		try {
-			return localStorage.getItem(AUTO_TTS_KEY) !== "false";
+			const v = localStorage.getItem(AUTO_TTS_KEY) !== "false";
+			autoTTSFlag = v;
+			return v;
 		} catch {
 			return true;
 		}
 	});
 	const setAutoTTS = useCallback((v: boolean) => {
 		setAutoTTSRaw(v);
+		autoTTSFlag = v;
 		try {
 			localStorage.setItem(AUTO_TTS_KEY, String(v));
 		} catch {}
@@ -497,7 +506,7 @@ ${truncated}${chatSummary ? `\n\n# 之前的文字对话记录（供参考）\n$
 		[persona, runtime],
 	);
 
-	const exitVoiceMode = useCallback((voiceMessages?: VoiceTranscriptItem[]) => {
+	const exitVoiceMode = useCallback((voiceMessages?: VoiceTranscript[]) => {
 		if (voiceMessages && voiceMessages.length > 0) {
 			pendingVoiceMsgs = voiceMessages;
 		}
@@ -553,29 +562,200 @@ function PersonaSync() {
 	return null;
 }
 
-/** Auto-speaks last assistant message when generation finishes.
- *  Uses aui.thread().speak(messageId) so the message UI shows speech state. */
+// ── Streaming sentence-level TTS ──────────────────────────────────────────
+
+const MIN_CHARS = 20;
+const MAX_CHARS = 100;
+
+/** Pre-fetching sequential audio queue.
+ *  Fetches start immediately on enqueue(); playback is strictly sequential. */
+class TTSPlayQueue {
+	private items: Promise<Blob | null>[] = [];
+	private playing = false;
+	private abortCtrl = new AbortController();
+	onIdle?: () => void;
+
+	enqueue(text: string) {
+		const t = text.trim();
+		if (!t || this.abortCtrl.signal.aborted) return;
+		this.items.push(fetchTTSBlob(t, ttsAdapter.voiceParams));
+		if (!this.playing) this.drain();
+	}
+
+	abort() {
+		this.abortCtrl.abort();
+		this.items.length = 0;
+	}
+
+	private async drain() {
+		this.playing = true;
+		let isFirst = true;
+		while (this.items.length > 0 && !this.abortCtrl.signal.aborted) {
+			const blobPromise = this.items.shift() as Promise<Blob | null>;
+			const blob = await blobPromise;
+			if (!blob || blob.size === 0 || this.abortCtrl.signal.aborted) continue;
+			// Brief pause between segments for natural pacing
+			if (!isFirst) await new Promise((r) => setTimeout(r, CHUNK_GAP_MS));
+			if (this.abortCtrl.signal.aborted) break;
+			await playBlob(blob, this.abortCtrl.signal);
+			isFirst = false;
+		}
+		this.playing = false;
+		if (!this.abortCtrl.signal.aborted) this.onIdle?.();
+	}
+}
+
+/** Streaming TTS with smart batching:
+ *  - First chunk: sent to fetch as soon as MIN_CHARS at a sentence boundary
+ *  - Subsequent: accumulate in buffer until first audio finishes playing
+ *  - MAX_CHARS: force-send if buffer grows too large
+ *  - On generation end: flush immediately */
+class StreamingTTS {
+	private buffer = "";
+	private firstSent = false;
+	private firstDone = false;
+	private aborted = false;
+	readonly queue = new TTSPlayQueue();
+
+	constructor() {
+		this.queue.onIdle = () => {
+			if (!this.firstDone && this.firstSent) {
+				this.firstDone = true;
+				this.trySend(false);
+			}
+		};
+	}
+
+	addSentence(text: string) {
+		if (this.aborted || !text.trim()) return;
+		this.buffer += text;
+		this.trySend(false);
+	}
+
+	flush() {
+		if (this.aborted) return;
+		this.trySend(true);
+	}
+
+	abort() {
+		this.aborted = true;
+		this.buffer = "";
+		this.queue.abort();
+	}
+
+	private trySend(force: boolean) {
+		const text = this.buffer.trim();
+		if (!text) return;
+		const overMax = text.length >= MAX_CHARS;
+
+		if (!this.firstSent) {
+			if (text.length >= MIN_CHARS || force || overMax) {
+				this.buffer = "";
+				this.firstSent = true;
+				this.queue.enqueue(text);
+			}
+		} else if (this.firstDone || force || overMax) {
+			this.buffer = "";
+			this.queue.enqueue(text);
+		}
+	}
+}
+
+/** Watches LLM streaming output and feeds sentences to StreamingTTS.
+ *  Bridges into assistant-ui speech state via ttsAdapter proxy mode,
+ *  so the speak/stop button in the message UI reflects auto-TTS state. */
 function AutoSpeakWatcher() {
 	const { autoTTS } = useAutoTTS();
 	const { voiceMode } = useVoiceMode();
 	const aui = useAui();
 	const isRunning = useAuiState((s) => s.thread.isRunning);
+	const isDictating = useAuiState((s) => s.composer.dictation != null);
 	const wasRunning = useRef(false);
+	const ttsRef = useRef<StreamingTTS | null>(null);
+	const spokenLenRef = useRef(0);
 
+	// Dictation started → abort TTS immediately
 	useEffect(() => {
-		if (wasRunning.current && !isRunning && autoTTS && !voiceMode.active) {
-			// Generation finished — auto-speak last assistant message
-			const msgs = aui.thread().getState().messages;
-			const last = [...msgs].reverse().find((m) => m.role === "assistant");
-			if (last) aui.thread().message({ id: last.id }).speak();
+		if (isDictating && ttsRef.current) {
+			ttsRef.current.abort();
+			ttsRef.current = null;
+			ttsAdapter.endProxy();
 		}
+	}, [isDictating]);
+
+	// Single effect handles both transitions and polling
+	useEffect(() => {
+		// ── Transition: idle → running (new generation started) ──
 		if (!wasRunning.current && isRunning) {
-			// New generation started (user sent message) — stop current speech
+			ttsRef.current?.abort();
+			ttsAdapter.endProxy();
+			if (autoTTS && !voiceMode.active) {
+				ttsRef.current = new StreamingTTS();
+				spokenLenRef.current = 0;
+			} else {
+				ttsRef.current = null;
+			}
 			const speech = aui.thread().getState().speech;
 			if (speech) aui.thread().stopSpeaking();
 		}
+
+		// ── Transition: running → idle (generation finished) ──
+		if (wasRunning.current && !isRunning && ttsRef.current) {
+			const tts = ttsRef.current;
+			// Consume any final text
+			const fullText = getLastAssistantText(aui);
+			const remaining = fullText.slice(spokenLenRef.current);
+			if (remaining.trim()) tts.addSentence(remaining);
+			tts.flush();
+			spokenLenRef.current = 0;
+
+			// Bridge into assistant-ui speech state via proxy utterance.
+			// This makes the message's speak button show "stop" during auto-TTS,
+			// and clicking stop will abort the streaming TTS.
+			ttsAdapter.enterProxyMode(() => {
+				tts.abort();
+				ttsRef.current = null;
+			});
+			const msgs = aui.thread().getState().messages;
+			const last = [...msgs].reverse().find((m) => m.role === "assistant");
+			if (last) {
+				aui.thread().message({ id: last.id }).speak();
+				// End proxy when queue drains
+				const origOnIdle = tts.queue.onIdle;
+				tts.queue.onIdle = () => {
+					origOnIdle?.();
+					ttsAdapter.endProxy();
+				};
+			}
+		}
+
 		wasRunning.current = isRunning;
+
+		// ── Polling: feed sentences during streaming ──
+		if (!isRunning || !ttsRef.current) return;
+		const tts = ttsRef.current;
+		const interval = setInterval(() => {
+			const fullText = getLastAssistantText(aui);
+			const unspoken = fullText.slice(spokenLenRef.current);
+			if (!unspoken) return;
+			const parts = unspoken.split(SENTENCE_RE);
+			for (let i = 0; i < parts.length - 1; i++) {
+				tts.addSentence(parts[i]);
+				spokenLenRef.current += parts[i].length;
+			}
+		}, 200);
+		return () => clearInterval(interval);
 	}, [isRunning, autoTTS, voiceMode.active, aui]);
 
 	return null;
+}
+
+function getLastAssistantText(aui: ReturnType<typeof useAui>): string {
+	const msgs = aui.thread().getState().messages;
+	const last = [...msgs].reverse().find((m) => m.role === "assistant");
+	if (!last) return "";
+	return last.content
+		.filter((p): p is { type: "text"; text: string } => p.type === "text")
+		.map((p) => p.text)
+		.join("");
 }

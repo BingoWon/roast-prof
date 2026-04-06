@@ -733,10 +733,20 @@ export function Chat({
 								}}
 							/>
 
-							<ThreadPrimitive.ViewportFooter className="sticky bottom-0 mx-auto mt-auto flex w-full max-w-[var(--thread-max-width)] flex-col gap-4 overflow-visible rounded-t-3xl bg-gradient-to-t from-white via-white/90 dark:from-zinc-900 dark:via-zinc-900/90 to-transparent pb-4">
-								<ThreadScrollToBottom />
-								<Composer />
-							</ThreadPrimitive.ViewportFooter>
+							<AuiIf
+								condition={(s) =>
+									!(
+										s.thread.isEmpty &&
+										!s.thread.isLoading &&
+										!!s.threadListItem.remoteId
+									)
+								}
+							>
+								<ThreadPrimitive.ViewportFooter className="sticky bottom-0 mx-auto mt-auto flex w-full max-w-[var(--thread-max-width)] flex-col gap-4 overflow-visible rounded-t-3xl bg-gradient-to-t from-white via-white/90 dark:from-zinc-900 dark:via-zinc-900/90 to-transparent pb-4">
+									<ThreadScrollToBottom />
+									<Composer />
+								</ThreadPrimitive.ViewportFooter>
+							</AuiIf>
 						</ThreadPrimitive.Viewport>
 					</ThreadPrimitive.Root>
 				</HighlightCtx>
