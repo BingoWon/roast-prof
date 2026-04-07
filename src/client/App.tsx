@@ -8,6 +8,7 @@ import {
 	Maximize2,
 	Mic,
 	Minimize2,
+	Sparkles,
 	X,
 } from "lucide-react";
 import { type FC, useCallback, useEffect, useRef, useState } from "react";
@@ -415,11 +416,14 @@ function App() {
 											viewLang={activeDoc.lang === "en" ? viewLang : "original"}
 										/>
 
-										{/* Voice reading mode */}
-										<VoiceButton
-											docId={activeDoc.id}
-											docTitle={activeDoc.title}
-										/>
+										{/* Companion modes (vertical stack) */}
+										<div className="flex flex-col gap-0.5">
+											<VoiceCompanionButton
+												docId={activeDoc.id}
+												docTitle={activeDoc.title}
+											/>
+											<DialogueCompanionButton />
+										</div>
 
 										{/* Focus mode */}
 										<button
@@ -578,9 +582,9 @@ const DocViewerWithVoice: FC<{
 	);
 };
 
-// ── Voice Button (lives inside RuntimeProvider for context access) ──────────
+// ── Companion Mode Buttons (doc toolbar, vertical stack) ─────────────────
 
-const VoiceButton: FC<{ docId: string; docTitle: string }> = ({
+const VoiceCompanionButton: FC<{ docId: string; docTitle: string }> = ({
 	docId,
 	docTitle,
 }) => {
@@ -593,14 +597,38 @@ const VoiceButton: FC<{ docId: string; docTitle: string }> = ({
 			onClick={() =>
 				active ? exitVoiceMode() : enterVoiceMode(docId, docTitle)
 			}
-			className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
+			className={`flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-medium transition-colors cursor-pointer ${
 				active
 					? "text-purple-500 bg-purple-50 dark:bg-purple-950/30"
 					: "text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800"
 			}`}
-			title={active ? "退出语音陪读" : "语音陪读"}
+			title={active ? "退出语音伴读" : "语音伴读"}
 		>
-			<Mic className="w-3.5 h-3.5" />
+			<Mic className="w-3 h-3" />
+			语音伴读
+		</button>
+	);
+};
+
+const DialogueCompanionButton: FC = () => {
+	const { dialogueMode, enterDialogueMode, exitDialogueMode } =
+		useDialogueMode();
+
+	return (
+		<button
+			type="button"
+			onClick={() =>
+				dialogueMode.active ? exitDialogueMode() : enterDialogueMode()
+			}
+			className={`flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-medium transition-colors cursor-pointer ${
+				dialogueMode.active
+					? "text-amber-500 bg-amber-50 dark:bg-amber-950/30"
+					: "text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+			}`}
+			title={dialogueMode.active ? "退出剧情伴读" : "剧情伴读"}
+		>
+			<Sparkles className="w-3 h-3" />
+			剧情伴读
 		</button>
 	);
 };
