@@ -106,8 +106,6 @@ chat.post("/", async (c) => {
 		}
 
 		const prepared = stripUnresolvedToolCalls(resolveDataUrls(messages));
-		// biome-ignore lint/suspicious/noExplicitAny: UIMessage wire format
-		const modelMessages = await convertToModelMessages(prepared as any);
 
 		// Retrieve memories
 		let retrievedMemories: Awaited<ReturnType<typeof searchMemories>> = [];
@@ -133,8 +131,7 @@ chat.post("/", async (c) => {
 
 		// Build system prompt
 		const tz = c.req.header("x-timezone") || "Asia/Shanghai";
-		const now = new Date();
-		const timeStr = now.toLocaleString("zh-CN", { timeZone: tz });
+		const timeStr = new Date().toLocaleString("zh-CN", { timeZone: tz });
 		const autoTTS = c.req.header("x-auto-tts") === "1";
 		let systemPrompt =
 			`${getSystemPrompt(persona)}\n\n当前时间：${timeStr}` +
@@ -164,20 +161,17 @@ chat.post("/", async (c) => {
 		if (userId && c.env.MEM0_API_KEY) {
 			memoryTools = createMemoryTool({ env: c.env, userId });
 		}
-
 		// biome-ignore lint/suspicious/noExplicitAny: tool generics incompatible with Record
 		let exaTools: Record<string, any> = {};
 		if (c.env.EXA_API_KEY) {
 			exaTools = createExaTools({ env: c.env });
 		}
-
 		// biome-ignore lint/suspicious/noExplicitAny: tool generics incompatible with Record
 		let docTools: Record<string, any> = {};
 		if (userId) {
 			try {
-				const docIds = docList.map((d) => d.id);
 				docTools = createDocTools({
-					docIds,
+					docIds: docList.map((d) => d.id),
 					docList,
 					db,
 					vectorize: c.env.VECTORIZE,
@@ -201,73 +195,93 @@ chat.post("/", async (c) => {
 			);
 		}
 
-		return createUIMessageStreamResponse({
-			status: 200,
-			stream: createUIMessageStream({
-				execute: async ({ writer }) => {
-					const chatResult = streamText({
-						model: wrappedModel,
-						system: systemPrompt,
-						messages: modelMessages,
-						tools: {
-							...hitlTools,
-							...exaTools,
-							...memoryTools,
-							...docTools,
-						},
-						stopWhen: stepCountIs(8),
+		// Promise to keep worker alive until DB persist completes
+		let resolveFinish!: () => void;
+		const finishPromise = new Promise<void>((r) => {
+			resolveFinish = r;
+		});
+
+		const uiStream = createUIMessageStream({
+			execute: async ({ writer }) => {
+				// biome-ignore lint/suspicious/noExplicitAny: wire format → UIMessage
+				const modelMessages = await convertToModelMessages(prepared as any);
+
+				const lastModelMsg = modelMessages[modelMessages.length - 1];
+				const isHitlContinuation =
+					lastModelMsg?.role === "tool" ||
+					(lastModelMsg?.role === "assistant" &&
+						Array.isArray(lastModelMsg.content) &&
+						lastModelMsg.content.some(
+							(p: { type: string }) => p.type === "tool-result",
+						));
+
+				const chatResult = streamText({
+					model: wrappedModel,
+					system: systemPrompt,
+					messages: modelMessages,
+					tools: {
+						...hitlTools,
+						...exaTools,
+						...memoryTools,
+						...docTools,
+					},
+					stopWhen: stepCountIs(5),
+					...(isHitlContinuation && {
 						providerOptions: {
 							openrouter: { reasoning: { effort: "none" } },
 						},
-						onFinish: async (result) => {
-							if (!threadId || !userId) return;
-							try {
-								const aId = crypto.randomUUID();
-								const assistantParts = result.response.messages
-									.filter((m) => m.role === "assistant")
-									.flatMap((m) =>
-										typeof m.content === "string"
-											? [{ type: "text" as const, text: m.content }]
-											: m.content,
-									)
-									.map((c) => {
-										if (c.type === "text")
-											return { type: "text", text: c.text };
-										if (c.type === "tool-call")
-											return {
-												type: `tool-${c.toolName}`,
-												toolCallId: c.toolCallId,
-												// biome-ignore lint/suspicious/noExplicitAny: ToolCallPart wire format
-												input: (c as any).args,
-											};
-										return c;
-									});
-								if (assistantParts.length > 0) {
-									await saveMessages(db, [
-										{
-											id: aId,
-											threadId,
-											role: "assistant",
-											parts: assistantParts,
-											createdAt: Math.floor(Date.now() / 1000),
-										},
-									]);
-									await touchThread(db, threadId, userId);
-								}
-							} catch (e) {
-								log.error({
-									module: "chat",
-									msg: "assistant persist failed",
-									error: String(e),
-								});
-							}
-						},
+					}),
+				});
+
+				writer.merge(
+					chatResult.toUIMessageStream({
+						sendReasoning: true,
+						messageMetadata: ({ part }) =>
+							part.type === "start" && retrievedMemories.length > 0
+								? { mem0: retrievedMemories }
+								: undefined,
+					}),
+				);
+			},
+			onFinish: async ({ messages: finishedMessages }) => {
+				try {
+					if (threadId && userId && finishedMessages.length > 0) {
+						const inputIds = new Set(
+							messages.map((m: WireMessage) => m.id).filter(Boolean),
+						);
+						const newMsgs = finishedMessages.filter(
+							(m) => m.role !== "user" && !inputIds.has(m.id),
+						);
+						if (newMsgs.length > 0) {
+							const now = Math.floor(Date.now() / 1000);
+							await saveMessages(
+								db,
+								newMsgs.map((m) => ({
+									id: m.id,
+									threadId,
+									role: m.role,
+									parts: m.parts as unknown[],
+									createdAt: now,
+								})),
+							);
+							await touchThread(db, threadId, userId);
+						}
+					}
+				} catch (e) {
+					log.error({
+						module: "chat",
+						msg: "persist assistant msgs failed",
+						error: String(e),
 					});
-					// biome-ignore lint/suspicious/noExplicitAny: streamText result type mismatch with Output
-					(chatResult as any).mergeIntoDataStream(writer);
-				},
-			}),
+				} finally {
+					resolveFinish();
+				}
+			},
+			generateId: () => crypto.randomUUID(),
 		});
+
+		c.executionCtx.waitUntil(finishPromise);
+		return createUIMessageStreamResponse({ stream: uiStream });
 	} catch (error: unknown) {
 		const msg = error instanceof Error ? error.message : "未知错误";
 		log.error({ module: "chat", msg });
