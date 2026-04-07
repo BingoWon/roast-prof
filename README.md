@@ -1,6 +1,6 @@
-# AI Playground
+# StudyDojo 学乐园
 
-> A full-stack framework for testing and validating LLM capabilities — reasoning visibility, tool calling, multimodal input, and streaming UI — built on Cloudflare Workers.
+> AI-powered academic reading assistant with anime-inspired personas — text chat, voice tutoring, and visual novel-style dialogue — built on Cloudflare Workers.
 
 ## Tech Stack
 
