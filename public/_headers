@@ -1,3 +1,16 @@
-# Character images — immutable static assets, cache forever
+# Static character images — immutable, cache forever
 /characters/*
   Cache-Control: public, max-age=31536000, immutable
+
+# Hashed JS/CSS bundles — immutable after build
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
+
+# API responses — no cache (dynamic)
+/api/*
+  Cache-Control: no-store
+
+# All pages — short cache + revalidate for SPA
+/*
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
