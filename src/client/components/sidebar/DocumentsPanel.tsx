@@ -93,6 +93,7 @@ export const DocumentsPanel: FC<{
 			".txt",
 			".md",
 			".docx",
+		".doc",
 		];
 		if (!SUPPORTED.some((e) => file.name.toLowerCase().endsWith(e))) return;
 
@@ -279,7 +280,7 @@ export const DocumentsPanel: FC<{
 			<input
 				ref={fileRef}
 				type="file"
-				accept=".pdf,.png,.jpg,.jpeg,.webp,.txt,.md,.docx"
+				accept=".pdf,.png,.jpg,.jpeg,.webp,.txt,.md,.docx,.doc"
 				className="hidden"
 				onChange={(e) => {
 					const f = e.target.files?.[0];

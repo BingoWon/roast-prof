@@ -126,7 +126,10 @@ async function parseWithPaddleOCR(
 // ── DOCX → Markdown ─────────────────────────────────────────────────────────
 
 async function parseDocx(buffer: ArrayBuffer): Promise<string> {
-	const result = await mammoth.extractRawText({ arrayBuffer: buffer });
+	// mammoth types are incomplete — convertToMarkdown exists at runtime
+	// biome-ignore lint/suspicious/noExplicitAny: missing from @types
+	const convert = (mammoth as any).convertToMarkdown as typeof mammoth.extractRawText;
+	const result = await convert({ buffer: Buffer.from(buffer) });
 	return result.value;
 }
 
@@ -143,7 +146,8 @@ export function classifyFile(name: string): {
 	if (["png", "jpg", "jpeg", "webp", "bmp", "tiff"].includes(ext))
 		return { category: "ocr", ocrType: 1 };
 	if (["txt", "md", "markdown"].includes(ext)) return { category: "text" };
-	if (["docx"].includes(ext)) return { category: "docx" };
+	if (ext === "docx") return { category: "docx" };
+	if (ext === "doc") return { category: "ocr", ocrType: 0 };
 	return { category: "text" };
 }
 
