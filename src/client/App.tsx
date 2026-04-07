@@ -289,13 +289,13 @@ function App() {
 					>
 						{/* 左栏 */}
 						{layout.leftCollapsed ? (
-							!layout.focused && (
+							!layout.immersive && (
 								<CollapsedHandle direction="left" onClick={layout.toggleLeft} />
 							)
 						) : (
 							<div
 								style={{ width: layout.leftWidth }}
-								className="h-full flex-shrink-0 overflow-hidden rounded-2xl bg-white/50 dark:bg-zinc-900/50 backdrop-blur-sm border border-white/60 dark:border-zinc-700/50"
+								className="h-full flex-shrink-0 overflow-hidden rounded-2xl bg-white/50 dark:bg-zinc-900/50 backdrop-blur-sm border border-white/60 dark:border-zinc-700/50 transition-[width] duration-300 ease-out"
 							>
 								<ThreadListSidebar
 									activeDocId={activeDoc?.id ?? null}
@@ -417,11 +417,15 @@ function App() {
 										{/* Focus mode */}
 										<button
 											type="button"
-											onClick={layout.toggleFocus}
+											onClick={
+												layout.immersive
+													? layout.exitImmersive
+													: layout.enterImmersive
+											}
 											className="p-1.5 rounded-lg text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
-											title={layout.focused ? "退出全屏" : "全屏阅读"}
+											title={layout.immersive ? "退出全屏" : "全屏阅读"}
 										>
-											{layout.focused ? (
+											{layout.immersive ? (
 												<Minimize2 className="w-3.5 h-3.5" />
 											) : (
 												<Maximize2 className="w-3.5 h-3.5" />
@@ -467,7 +471,7 @@ function App() {
 
 						{/* 右栏 */}
 						{layout.rightCollapsed ? (
-							!layout.focused && (
+							!layout.immersive && (
 								<CollapsedHandle
 									direction="right"
 									onClick={layout.toggleRight}
@@ -495,8 +499,8 @@ function App() {
 					</div>
 					{/* Dialogue mode: fixed bottom overlay (outside flex layout) */}
 					<DialogueOverlay
-						onCollapse={layout.collapseRight}
-						onRestore={layout.restoreRight}
+						onEnter={layout.enterImmersive}
+						onExit={layout.exitImmersive}
 					/>
 				</RuntimeProvider>
 			</Show>
@@ -585,23 +589,23 @@ const DocViewerWithVoice: FC<{
 // ── Dialogue Overlay (fixed bottom, outside flex layout) ─────────────────────
 
 const DialogueOverlay: FC<{
-	onCollapse: () => void;
-	onRestore: () => void;
-}> = ({ onCollapse, onRestore }) => {
+	onEnter: () => void;
+	onExit: () => void;
+}> = ({ onEnter, onExit }) => {
 	const { dialogueMode, exitDialogueMode } = useDialogueMode();
 	const { persona } = usePersona();
 	const prevActiveRef = useRef(false);
 
-	// Auto-collapse right panel on enter, restore on exit
+	// Auto-enter/exit immersive mode with dialogue
 	useEffect(() => {
 		if (dialogueMode.active && !prevActiveRef.current) {
-			onCollapse();
+			onEnter();
 		}
 		if (!dialogueMode.active && prevActiveRef.current) {
-			onRestore();
+			onExit();
 		}
 		prevActiveRef.current = dialogueMode.active;
-	}, [dialogueMode.active, onCollapse, onRestore]);
+	}, [dialogueMode.active, onEnter, onExit]);
 
 	if (!dialogueMode.active) return null;
 

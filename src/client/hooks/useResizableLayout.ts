@@ -154,70 +154,48 @@ export function useResizableLayout(
 		}
 	}, [rightCollapsed]);
 
-	// Focus mode: collapse both sidebars, restore on second call
-	const savedRef = useRef<{
+	// ── Immersive mode: collapse both panels, restore on exit ──
+	// Used by both focus mode (toggleFocus) and dialogue mode (enterImmersive)
+	const immersiveSavedRef = useRef<{
 		left: number;
 		right: number;
 		leftC: boolean;
 		rightC: boolean;
 	} | null>(null);
-	const [focused, setFocused] = useState(false);
+	const [immersive, setImmersive] = useState(false);
 
-	const toggleFocus = useCallback(() => {
-		if (!focused) {
-			savedRef.current = {
-				left: leftWidth,
-				right: rightWidth,
-				leftC: leftCollapsed,
-				rightC: rightCollapsed,
-			};
-			setLeftCollapsed(true);
-			setRightCollapsed(true);
-			setLeftWidth(0);
-			setRightWidth(0);
-			setFocused(true);
+	const enterImmersive = useCallback(() => {
+		if (immersive) return;
+		immersiveSavedRef.current = {
+			left: leftWidth,
+			right: rightWidth,
+			leftC: leftCollapsed,
+			rightC: rightCollapsed,
+		};
+		setLeftCollapsed(true);
+		setRightCollapsed(true);
+		setLeftWidth(0);
+		setRightWidth(0);
+		setImmersive(true);
+	}, [immersive, leftWidth, rightWidth, leftCollapsed, rightCollapsed]);
+
+	const exitImmersive = useCallback(() => {
+		if (!immersive) return;
+		const s = immersiveSavedRef.current;
+		if (s) {
+			setLeftCollapsed(s.leftC);
+			setRightCollapsed(s.rightC);
+			setLeftWidth(s.leftC ? 0 : s.left);
+			setRightWidth(s.rightC ? 0 : s.right);
 		} else {
-			const s = savedRef.current;
-			if (s) {
-				setLeftCollapsed(s.leftC);
-				setRightCollapsed(s.rightC);
-				setLeftWidth(s.leftC ? 0 : s.left);
-				setRightWidth(s.rightC ? 0 : s.right);
-			} else {
-				setLeftCollapsed(false);
-				setRightCollapsed(false);
-				setLeftWidth(defaultsRef.current.left);
-				setRightWidth(defaultsRef.current.right);
-			}
-			setFocused(false);
-			savedRef.current = null;
-		}
-	}, [focused, leftWidth, rightWidth, leftCollapsed, rightCollapsed]);
-
-	// Programmatic collapse/restore for right panel (used by dialogue mode)
-	const rightSavedRef = useRef<{ width: number; collapsed: boolean } | null>(
-		null,
-	);
-
-	const collapseRight = useCallback(() => {
-		if (!rightCollapsed) {
-			rightSavedRef.current = { width: rightWidth, collapsed: false };
-			setRightCollapsed(true);
-			setRightWidth(0);
-		}
-	}, [rightCollapsed, rightWidth]);
-
-	const restoreRight = useCallback(() => {
-		const saved = rightSavedRef.current;
-		if (saved && !saved.collapsed) {
+			setLeftCollapsed(false);
 			setRightCollapsed(false);
-			setRightWidth(saved.width);
-		} else {
-			setRightCollapsed(false);
+			setLeftWidth(defaultsRef.current.left);
 			setRightWidth(defaultsRef.current.right);
 		}
-		rightSavedRef.current = null;
-	}, []);
+		setImmersive(false);
+		immersiveSavedRef.current = null;
+	}, [immersive]);
 
 	const leftDividerProps: DividerProps = {
 		onMouseDown: (e) => onMouseDown("left", e),
@@ -242,13 +220,12 @@ export function useResizableLayout(
 		rightWidth,
 		leftCollapsed,
 		rightCollapsed,
-		focused,
+		immersive,
 		leftDividerProps,
 		rightDividerProps,
 		toggleLeft,
 		toggleRight,
-		toggleFocus,
-		collapseRight,
-		restoreRight,
+		enterImmersive,
+		exitImmersive,
 	};
 }
