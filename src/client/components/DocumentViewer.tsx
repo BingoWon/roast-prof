@@ -1,4 +1,4 @@
-import { Eraser, Loader2, Mic } from "lucide-react";
+import { Eraser, Loader2, Mic, Sparkles } from "lucide-react";
 import Mark from "mark.js";
 import { type FC, useCallback, useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
@@ -46,6 +46,8 @@ export const DocumentViewer: FC<{
 	onClearHighlights?: () => void;
 	onVoiceRead?: () => void;
 	isVoiceActive?: boolean;
+	onDialogue?: () => void;
+	isDialogueActive?: boolean;
 }> = ({
 	docId,
 	viewLang,
@@ -56,6 +58,8 @@ export const DocumentViewer: FC<{
 	onClearHighlights,
 	onVoiceRead,
 	isVoiceActive,
+	onDialogue,
+	isDialogueActive,
 }) => {
 	const [markdown, setMarkdown] = useState<string | null>(null);
 	const [chunks, setChunks] = useState<string[] | null>(null);
@@ -288,22 +292,38 @@ export const DocumentViewer: FC<{
 			onMouseUp={handleMouseUp}
 			onMouseDown={handleContainerMouseDown}
 		>
-			{/* Floating voice reading button */}
-			{onVoiceRead && (
+			{/* Floating companion buttons (vertical stack) */}
+			{(onVoiceRead || onDialogue) && (
 				<div className="sticky top-0 z-20 pointer-events-none h-0">
-					<div className="absolute right-4 top-2 pointer-events-auto">
-						<button
-							type="button"
-							onClick={onVoiceRead}
-							className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium shadow-md transition-all cursor-pointer ${
-								isVoiceActive
-									? "bg-purple-500 text-white shadow-purple-500/25"
-									: "bg-white dark:bg-zinc-800 text-purple-600 dark:text-purple-400 border border-purple-200 dark:border-purple-800 hover:bg-purple-50 dark:hover:bg-purple-950/30 hover:shadow-lg"
-							}`}
-						>
-							<Mic className="w-3.5 h-3.5" />
-							{isVoiceActive ? "语音对话中" : "语音陪读"}
-						</button>
+					<div className="absolute right-4 top-2 pointer-events-auto flex flex-col gap-1.5">
+						{onVoiceRead && (
+							<button
+								type="button"
+								onClick={onVoiceRead}
+								className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium shadow-md transition-all cursor-pointer ${
+									isVoiceActive
+										? "bg-purple-500 text-white shadow-purple-500/25"
+										: "bg-white dark:bg-zinc-800 text-purple-600 dark:text-purple-400 border border-purple-200 dark:border-purple-800 hover:bg-purple-50 dark:hover:bg-purple-950/30 hover:shadow-lg"
+								}`}
+							>
+								<Mic className="w-3.5 h-3.5" />
+								{isVoiceActive ? "语音对话中" : "语音伴读"}
+							</button>
+						)}
+						{onDialogue && (
+							<button
+								type="button"
+								onClick={onDialogue}
+								className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium shadow-md transition-all cursor-pointer ${
+									isDialogueActive
+										? "bg-amber-500 text-white shadow-amber-500/25"
+										: "bg-white dark:bg-zinc-800 text-amber-600 dark:text-amber-400 border border-amber-200 dark:border-amber-800 hover:bg-amber-50 dark:hover:bg-amber-950/30 hover:shadow-lg"
+								}`}
+							>
+								<Sparkles className="w-3.5 h-3.5" />
+								{isDialogueActive ? "剧情对话中" : "剧情伴读"}
+							</button>
+						)}
 					</div>
 				</div>
 			)}
@@ -312,7 +332,7 @@ export const DocumentViewer: FC<{
 			{highlights.length > 0 && onClearHighlights && (
 				<div className="sticky top-0 z-10 pointer-events-none h-0">
 					<div
-						className={`absolute right-4 pointer-events-auto ${onVoiceRead ? "top-12" : "top-2"}`}
+						className={`absolute right-4 pointer-events-auto ${onVoiceRead && onDialogue ? "top-[5.5rem]" : onVoiceRead || onDialogue ? "top-12" : "top-2"}`}
 					>
 						<button
 							type="button"

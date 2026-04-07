@@ -6,9 +6,7 @@ import {
 	Globe,
 	Languages,
 	Maximize2,
-	Mic,
 	Minimize2,
-	Sparkles,
 	X,
 } from "lucide-react";
 import { type FC, useCallback, useEffect, useRef, useState } from "react";
@@ -416,15 +414,6 @@ function App() {
 											viewLang={activeDoc.lang === "en" ? viewLang : "original"}
 										/>
 
-										{/* Companion modes (vertical stack) */}
-										<div className="flex flex-col gap-0.5">
-											<VoiceCompanionButton
-												docId={activeDoc.id}
-												docTitle={activeDoc.title}
-											/>
-											<DialogueCompanionButton />
-										</div>
-
 										{/* Focus mode */}
 										<button
 											type="button"
@@ -568,68 +557,23 @@ const DocViewerWithVoice: FC<{
 	onClearHighlights?: () => void;
 }> = ({ doc, ...rest }) => {
 	const { voiceMode, enterVoiceMode, exitVoiceMode } = useVoiceMode();
-	const active = voiceMode.active && voiceMode.docId === doc.id;
+	const { dialogueMode, enterDialogueMode, exitDialogueMode } =
+		useDialogueMode();
+	const voiceActive = voiceMode.active && voiceMode.docId === doc.id;
 
 	return (
 		<DocumentViewer
 			docId={doc.id}
 			{...rest}
 			onVoiceRead={() =>
-				active ? exitVoiceMode() : enterVoiceMode(doc.id, doc.title)
+				voiceActive ? exitVoiceMode() : enterVoiceMode(doc.id, doc.title)
 			}
-			isVoiceActive={active}
-		/>
-	);
-};
-
-// ── Companion Mode Buttons (doc toolbar, vertical stack) ─────────────────
-
-const VoiceCompanionButton: FC<{ docId: string; docTitle: string }> = ({
-	docId,
-	docTitle,
-}) => {
-	const { voiceMode, enterVoiceMode, exitVoiceMode } = useVoiceMode();
-	const active = voiceMode.active && voiceMode.docId === docId;
-
-	return (
-		<button
-			type="button"
-			onClick={() =>
-				active ? exitVoiceMode() : enterVoiceMode(docId, docTitle)
-			}
-			className={`flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-medium transition-colors cursor-pointer ${
-				active
-					? "text-purple-500 bg-purple-50 dark:bg-purple-950/30"
-					: "text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800"
-			}`}
-			title={active ? "退出语音伴读" : "语音伴读"}
-		>
-			<Mic className="w-3 h-3" />
-			语音伴读
-		</button>
-	);
-};
-
-const DialogueCompanionButton: FC = () => {
-	const { dialogueMode, enterDialogueMode, exitDialogueMode } =
-		useDialogueMode();
-
-	return (
-		<button
-			type="button"
-			onClick={() =>
+			isVoiceActive={voiceActive}
+			onDialogue={() =>
 				dialogueMode.active ? exitDialogueMode() : enterDialogueMode()
 			}
-			className={`flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-medium transition-colors cursor-pointer ${
-				dialogueMode.active
-					? "text-amber-500 bg-amber-50 dark:bg-amber-950/30"
-					: "text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800"
-			}`}
-			title={dialogueMode.active ? "退出剧情伴读" : "剧情伴读"}
-		>
-			<Sparkles className="w-3 h-3" />
-			剧情伴读
-		</button>
+			isDialogueActive={dialogueMode.active}
+		/>
 	);
 };
 
