@@ -129,7 +129,7 @@ const PersonaSelect: FC = () => {
 				</div>
 			</div>
 
-			<div className="flex w-full flex-col gap-7 pt-6">
+			<div className="flex w-full flex-col gap-10 pt-8">
 				{PERSONA_IDS.map((id) => {
 					const p = PERSONAS[id];
 					const selected = persona === id;
@@ -147,7 +147,7 @@ const PersonaSelect: FC = () => {
 							{/* Card body — pl-20 reserves space for the avatar area */}
 							<div
 								className={`
-									relative rounded-2xl py-4 pr-4 pl-20
+									relative rounded-2xl py-4 pr-4 pl-[104px]
 									bg-gradient-to-r ${p.gradient}
 									border-2 transition-all duration-300 overflow-hidden
 									${
@@ -186,13 +186,13 @@ const PersonaSelect: FC = () => {
 								/>
 							</div>
 
-							{/* Avatar — bottom flush with card, height 130% of card so top 1/3 overflows */}
+							{/* Avatar — 80px square, bottom-0 flush with card, top overflows */}
 							<img
 								src={`/characters/${id}/avatars/neutral.webp`}
 								alt={p.name}
 								draggable={false}
 								className={`
-									absolute left-3 bottom-0 h-[130%] w-auto z-10
+									absolute left-3 bottom-0 w-20 h-20 z-10
 									object-cover select-none
 									transition-all duration-300 ease-out
 									${selected ? "scale-110 -translate-y-1 drop-shadow-xl" : "group-hover:scale-105 group-hover:-translate-y-0.5 drop-shadow-md"}
