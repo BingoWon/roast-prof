@@ -4,7 +4,26 @@ import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 
 export default defineConfig({
-	plugins: [cloudflare(), react(), tailwindcss()],
+	plugins: [
+		cloudflare(),
+		react(),
+		tailwindcss(),
+		// Cache static character images in dev server
+		{
+			name: "cache-characters",
+			configureServer(server) {
+				server.middlewares.use((req, res, next) => {
+					if (req.url?.startsWith("/characters/")) {
+						res.setHeader(
+							"Cache-Control",
+							"public, max-age=31536000, immutable",
+						);
+					}
+					next();
+				});
+			},
+		},
+	],
 	optimizeDeps: {
 		entries: ["index.html", "src/client/**/*.{ts,tsx}"],
 	},

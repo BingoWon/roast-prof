@@ -631,15 +631,25 @@ const PoseImage: FC<{
 	const src = `/characters/${persona}/poses/${pose}.webp`;
 	const [loadedSrc, setLoadedSrc] = useState(src);
 	const [errSrc, setErrSrc] = useState("");
+	const [ready, setReady] = useState(false);
 
 	// Preload new image, then swap (prevents flicker)
 	useEffect(() => {
 		if (src === loadedSrc || src === errSrc) return;
+		setReady(false);
 		const img = new Image();
-		img.onload = () => setLoadedSrc(src);
+		img.onload = () => {
+			setLoadedSrc(src);
+			setReady(true);
+		};
 		img.onerror = () => setErrSrc(src);
 		img.src = src;
 	}, [src, loadedSrc, errSrc]);
+
+	// Mark ready on initial mount (image already cached)
+	useEffect(() => {
+		setReady(true);
+	}, []);
 
 	if (errSrc === src) {
 		return (
@@ -653,7 +663,7 @@ const PoseImage: FC<{
 		<img
 			src={loadedSrc}
 			alt={`${PERSONAS[persona].name} – ${pose}`}
-			className="w-full h-full object-contain object-bottom select-none drop-shadow-xl transition-opacity duration-300"
+			className={`w-full h-full object-contain object-bottom select-none drop-shadow-xl transition-opacity duration-300 ${ready ? "opacity-100" : "opacity-0"}`}
 			draggable={false}
 		/>
 	);
