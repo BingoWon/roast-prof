@@ -126,10 +126,15 @@ async function parseWithPaddleOCR(
 // ── DOCX → Markdown ─────────────────────────────────────────────────────────
 
 async function parseDocx(buffer: ArrayBuffer): Promise<string> {
-	// mammoth types are incomplete — convertToMarkdown exists at runtime
-	// biome-ignore lint/suspicious/noExplicitAny: missing from @types
-	const convert = (mammoth as any).convertToMarkdown as typeof mammoth.extractRawText;
-	const result = await convert({ buffer: Buffer.from(buffer) });
+	// Use mammoth's internal zipfile directly to avoid the Node.js `fs`-dependent
+	// unzip.js, which fails in Cloudflare Workers. The browser unzip accepts
+	// arrayBuffer but isn't exposed — so we pass a pre-opened zip as `file`.
+	// @ts-expect-error mammoth internals not typed
+	const zipfile = await import("mammoth/lib/zipfile");
+	const openedZip = await zipfile.openArrayBuffer(buffer);
+	// biome-ignore lint/suspicious/noExplicitAny: mammoth internals
+	const convert = (mammoth as any).convertToMarkdown;
+	const result = await convert({ file: openedZip });
 	return result.value;
 }
 

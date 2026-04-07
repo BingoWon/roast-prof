@@ -270,9 +270,14 @@ function App() {
 								return (
 									<span
 										key={id}
-										className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300"
+										className="inline-flex items-center gap-1.5 pl-1 pr-2.5 py-1 rounded-full text-xs font-medium bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300"
 									>
-										{p.emoji} {p.name}
+										<img
+											src={`/characters/${id}/avatars/neutral.webp`}
+											alt={p.name}
+											className="w-4 h-4 rounded-full object-cover"
+										/>
+										{p.name}
 										<span className="text-zinc-400 dark:text-zinc-500">
 											· {p.title}
 										</span>
