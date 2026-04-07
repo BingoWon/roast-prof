@@ -8,7 +8,11 @@ import {
 import { Hono } from "hono";
 import { createDb, ensureThread, saveMessages, touchThread } from "../db";
 import { log } from "../log";
-import { formatMemoriesForPrompt, searchMemories } from "../memory";
+import {
+	addMemories,
+	formatMemoriesForPrompt,
+	searchMemories,
+} from "../memory";
 import {
 	createModel,
 	DEFAULT_PERSONA,
@@ -66,53 +70,108 @@ chat.post("/", async (c) => {
 		const personaRaw = c.req.header("x-persona") || DEFAULT_PERSONA;
 		const persona = resolvePersona(personaRaw);
 		const userId = await requireUserId(c);
+
+		if (!c.env.LLM_API_KEY)
+			return c.json({ error: "缺少 LLM_API_KEY 配置" }, 500);
+		if (!c.env.LLM_MODEL) return c.json({ error: "缺少 LLM_MODEL 配置" }, 500);
+
 		const db = createDb(c.env.DB);
 
-		// Persist user message to DB
-		if (threadId && userId) {
-			const lastUserMsg = [...messages]
-				.reverse()
-				.find((m) => m.role === "user");
-			if (lastUserMsg) {
-				try {
-					await ensureThread(db, threadId, userId, { persona });
-					const parts = lastUserMsg.parts?.length
-						? lastUserMsg.parts
-						: lastUserMsg.content
-							? [
-									typeof lastUserMsg.content === "string"
-										? { type: "text", text: lastUserMsg.content }
-										: lastUserMsg.content,
-								]
-							: [];
-					await saveMessages(db, [
-						{
-							id: lastUserMsg.id ?? crypto.randomUUID(),
-							threadId,
-							role: "user",
-							parts: parts as unknown[],
-							createdAt: Math.floor(Date.now() / 1000),
-						},
-					]);
-					await touchThread(db, threadId, userId);
-				} catch (e) {
-					log.error({
-						module: "chat",
-						msg: "user message persist failed",
-						error: String(e),
-					});
+		// Trim text parts in all messages
+		for (const msg of messages) {
+			if (Array.isArray(msg.parts)) {
+				for (const p of msg.parts) {
+					if (p.type === "text" && typeof p.text === "string") {
+						p.text = p.text.trim();
+					}
 				}
 			}
 		}
 
-		const prepared = stripUnresolvedToolCalls(resolveDataUrls(messages));
+		const lastUserMsg = [...messages].reverse().find((m) => m.role === "user");
 
-		// Retrieve memories
+		// ── Persist user message ──────────────────────────────────────────────
+		if (threadId && userId && lastUserMsg) {
+			try {
+				await ensureThread(db, threadId, userId, { persona });
+				const parts = lastUserMsg.parts?.length
+					? lastUserMsg.parts
+					: [{ type: "text" as const, text: lastUserMsg.content ?? "" }];
+				await saveMessages(db, [
+					{
+						id: lastUserMsg.id ?? crypto.randomUUID(),
+						threadId,
+						role: "user",
+						parts: parts as unknown[],
+						createdAt: Math.floor(Date.now() / 1000),
+					},
+				]);
+				await touchThread(db, threadId, userId);
+			} catch (e) {
+				log.error({
+					module: "chat",
+					msg: "persist user msg failed",
+					error: String(e),
+				});
+			}
+		}
+
+		// ── Upsert assistant messages with tool results (HITL persistence) ───
+		if (threadId && userId) {
+			try {
+				const assistantWithResults = messages.filter(
+					(m: WireMessage) =>
+						m.role === "assistant" &&
+						Array.isArray(m.parts) &&
+						m.parts.some(
+							// biome-ignore lint/suspicious/noExplicitAny: wire format
+							(p: any) =>
+								p.type?.startsWith("tool-") &&
+								(p.result != null || p.output != null),
+						),
+				);
+				if (assistantWithResults.length > 0) {
+					const now = Math.floor(Date.now() / 1000);
+					await saveMessages(
+						db,
+						assistantWithResults.map((m: WireMessage) => ({
+							id: m.id,
+							threadId,
+							role: "assistant",
+							parts: m.parts as unknown[],
+							createdAt: now,
+						})),
+					);
+				}
+			} catch (e) {
+				log.error({
+					module: "chat",
+					msg: "upsert tool results failed",
+					error: String(e),
+				});
+			}
+		}
+
+		// ── Auto-generate title on first message ────────────────────────────
+		const userMessages = messages.filter((m: WireMessage) => m.role === "user");
+		if (threadId && userId && userMessages.length === 1) {
+			maybeAutoTitle(
+				c.executionCtx,
+				c.env,
+				db,
+				threadId,
+				userId,
+				userMessages as {
+					role: string;
+					parts?: { type: string; text?: string }[];
+				}[],
+			);
+		}
+
+		// ── Retrieve relevant memories ───────────────────────────────────────
 		let retrievedMemories: Awaited<ReturnType<typeof searchMemories>> = [];
 		if (userId && c.env.MEM0_API_KEY) {
-			const lastText = prepared
-				.filter((m: WireMessage) => m.role === "user")
-				.flatMap((m: WireMessage) => m.parts ?? [])
+			const lastText = lastUserMsg?.parts
 				?.filter((p: { type: string }) => p.type === "text")
 				.map((p: { text?: string }) => p.text ?? "")
 				.join(" ");
@@ -121,7 +180,7 @@ chat.post("/", async (c) => {
 			}
 		}
 
-		// Fetch user's document list
+		// ── Fetch user's document list ──────────────────────────────────────
 		let docList: Awaited<ReturnType<typeof listUserDocuments>> = [];
 		if (userId) {
 			try {
@@ -129,7 +188,7 @@ chat.post("/", async (c) => {
 			} catch {}
 		}
 
-		// Build system prompt
+		// ── Build system prompt ──────────────────────────────────────────────
 		const tz = c.req.header("x-timezone") || "Asia/Shanghai";
 		const timeStr = new Date().toLocaleString("zh-CN", { timeZone: tz });
 		const autoTTS = c.req.header("x-auto-tts") === "1";
@@ -155,7 +214,7 @@ chat.post("/", async (c) => {
 			}
 		}
 
-		// Build tools
+		// ── Build tools ─────────────────────────────────────────────────────
 		// biome-ignore lint/suspicious/noExplicitAny: tool generics incompatible with Record
 		let memoryTools: Record<string, any> = {};
 		if (userId && c.env.MEM0_API_KEY) {
@@ -180,22 +239,37 @@ chat.post("/", async (c) => {
 			} catch {}
 		}
 
-		const wrappedModel = createModel(c.env);
-
-		const userMessages = prepared.filter((m: WireMessage) => m.role === "user");
-		if (threadId && userId && userMessages.length === 1) {
-			maybeAutoTitle(
-				c.executionCtx,
-				c.env,
-				db,
-				threadId,
-				userId,
-				// biome-ignore lint/suspicious/noExplicitAny: wire format
-				userMessages as any,
-			);
+		// ── Extract memories concurrently (fire-and-forget) ──────────────────
+		if (userId && c.env.MEM0_API_KEY) {
+			const memMsgs = messages
+				.filter((m: WireMessage) => m.role === "user" || m.role === "assistant")
+				.slice(-6)
+				.map((m: WireMessage) => ({
+					role: m.role as string,
+					content:
+						m.parts
+							?.filter((p: { type: string }) => p.type === "text")
+							.map((p: { text?: string }) => p.text ?? "")
+							.join(" ")
+							.trim() ?? "",
+				}))
+				.filter((m) => m.content.length > 0);
+			if (memMsgs.length > 0) {
+				c.executionCtx.waitUntil(
+					addMemories(c.env, memMsgs, userId).catch((e) => {
+						log.error({
+							module: "chat",
+							msg: "memory extraction failed",
+							error: String(e),
+						});
+					}),
+				);
+			}
 		}
 
-		// Promise to keep worker alive until DB persist completes
+		// ── Stream chat response ─────────────────────────────────────────────
+		const wrappedModel = createModel(c.env);
+
 		let resolveFinish!: () => void;
 		const finishPromise = new Promise<void>((r) => {
 			resolveFinish = r;
@@ -203,8 +277,10 @@ chat.post("/", async (c) => {
 
 		const uiStream = createUIMessageStream({
 			execute: async ({ writer }) => {
-				// biome-ignore lint/suspicious/noExplicitAny: wire format → UIMessage
-				const modelMessages = await convertToModelMessages(prepared as any);
+				const modelMessages = await convertToModelMessages(
+					// biome-ignore lint/suspicious/noExplicitAny: wire format → UIMessage
+					stripUnresolvedToolCalls(resolveDataUrls(messages)) as any,
+				);
 
 				const lastModelMsg = modelMessages[modelMessages.length - 1];
 				const isHitlContinuation =
