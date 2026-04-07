@@ -13,7 +13,12 @@ export const ReasoningPart: FC = () => {
 	const hasEverStreamedRef = useRef(false);
 
 	const startTimeRef = useRef<number | null>(null);
-	const [duration, setDuration] = useState<number | undefined>(undefined);
+	const [duration, setDuration] = useState<number | undefined>(() => {
+		// If reasoning is already complete on mount (loaded from DB),
+		// set a fallback duration so the guard condition passes.
+		if (reasoning?.text && reasoning.status?.type === "complete") return 0;
+		return undefined;
+	});
 	const [copied, setCopied] = useState(false);
 
 	useEffect(() => {
@@ -42,9 +47,16 @@ export const ReasoningPart: FC = () => {
 
 	if (!reasoning?.text) return null;
 
+	// Hide duplicate reasoning: if not currently streaming and never had a
+	// measured duration, this is a copy from a previous continuation round.
+	// Note: DB-loaded reasoning gets duration=0 from the initializer above.
+	if (!isStreaming && !hasEverStreamedRef.current && duration === undefined) {
+		return null;
+	}
+
 	const label = isStreaming
 		? "思考中…"
-		: duration !== undefined
+		: duration !== undefined && duration > 0
 			? `思考 ${duration}s`
 			: "思考";
 
