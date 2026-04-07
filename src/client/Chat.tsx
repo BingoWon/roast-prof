@@ -147,7 +147,7 @@ const PersonaSelect: FC = () => {
 							{/* Card body — pl-20 reserves space for the avatar area */}
 							<div
 								className={`
-									relative rounded-2xl py-4 pr-4 pl-[104px]
+									relative rounded-2xl py-3.5 pr-4 pl-[108px]
 									bg-gradient-to-r ${p.gradient}
 									border-2 transition-all duration-300 overflow-hidden
 									${
@@ -186,13 +186,13 @@ const PersonaSelect: FC = () => {
 								/>
 							</div>
 
-							{/* Avatar — 80px square, bottom-0 flush with card, top overflows */}
+							{/* Avatar — 88px square, bottom flush with card, top ~1/3 overflows */}
 							<img
 								src={`/characters/${id}/avatars/neutral.webp`}
 								alt={p.name}
 								draggable={false}
 								className={`
-									absolute left-3 bottom-0 w-20 h-20 z-10
+									absolute left-3 bottom-0 w-[88px] h-[88px] z-10
 									object-cover select-none
 									transition-all duration-300 ease-out
 									${selected ? "scale-110 -translate-y-1 drop-shadow-xl" : "group-hover:scale-105 group-hover:-translate-y-0.5 drop-shadow-md"}
