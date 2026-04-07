@@ -220,6 +220,12 @@ export const DocumentsPanel: FC<{
 			writeCache(CACHE_KEYS.library, next);
 			return next;
 		});
+		// Evict cached document content
+		caches.open("doc-content").then((c) => {
+			c.delete(`/api/documents/${id}/markdown`);
+			c.delete(`/api/documents/${id}/markdown?lang=zh`);
+			c.delete(`/api/documents/${id}/chunks`);
+		}).catch(() => {});
 		await fetch(`/api/documents/${id}`, { method: "DELETE" });
 	};
 

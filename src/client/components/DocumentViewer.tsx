@@ -76,7 +76,7 @@ export const DocumentViewer: FC<{
 		text: string;
 	} | null>(null);
 
-	// ── Data fetching ─────────────────────────────────────────────────────
+	// ── Data fetching (with Cache API for large immutable docs) ──────────
 	useEffect(() => {
 		let cancelled = false;
 		setLoading(true);
@@ -90,9 +90,27 @@ export const DocumentViewer: FC<{
 				: `/api/documents/${docId}/markdown`;
 		const chunkUrl = `/api/documents/${docId}/chunks`;
 
+		/** Fetch with Cache API: serve from cache if available, else fetch + cache. */
+		const cachedFetch = async (url: string): Promise<Response> => {
+			try {
+				const cache = await caches.open("doc-content");
+				const cached = await cache.match(url);
+				if (cached) return cached;
+				const res = await fetch(url);
+				if (res.ok) {
+					// Clone before caching since body can only be consumed once
+					cache.put(url, res.clone());
+				}
+				return res;
+			} catch {
+				// Cache API unavailable (e.g. Firefox private mode) — fall back
+				return fetch(url);
+			}
+		};
+
 		Promise.all([
-			fetch(mdUrl).then((r) => (r.ok ? r.text() : null)),
-			fetch(chunkUrl)
+			cachedFetch(mdUrl).then((r) => (r.ok ? r.text() : null)),
+			cachedFetch(chunkUrl)
 				.then((r) => (r.ok ? r.json() : null))
 				.then((data) => (data as { chunks: string[] } | null)?.chunks ?? null),
 		])
