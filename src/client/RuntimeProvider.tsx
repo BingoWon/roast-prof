@@ -618,12 +618,8 @@ export const RuntimeProvider: FC<{ children: ReactNode }> = ({ children }) => {
 
 	/** After voice/dialogue exit, switch to the persisted thread and refresh sidebar + messages. */
 	const switchToPersistedThread = useCallback(async () => {
-		if (!capturedThreadId) {
-			console.warn("[switchToPersistedThread] no capturedThreadId");
-			return;
-		}
+		if (!capturedThreadId) return;
 		const tid = capturedThreadId;
-		console.log("[switchToPersistedThread] switching to", tid);
 		try {
 			await runtime.threads.switchToThread(tid);
 			window.history.replaceState(null, "", `/c/${tid}`);
@@ -635,7 +631,6 @@ export const RuntimeProvider: FC<{ children: ReactNode }> = ({ children }) => {
 				core._loadThreadsPromise = null;
 				core.getLoadThreadsPromise();
 			}
-			console.log("[switchToPersistedThread] switchToThread succeeded");
 		} catch (e) {
 			console.error("[switchToPersistedThread] failed:", e);
 			window.history.replaceState(null, "", `/c/${tid}`);
