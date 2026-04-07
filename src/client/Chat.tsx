@@ -129,7 +129,7 @@ const PersonaSelect: FC = () => {
 				</div>
 			</div>
 
-			<div className="flex w-full flex-col gap-3">
+			<div className="flex w-full flex-col gap-6 pt-4">
 				{PERSONA_IDS.map((id) => {
 					const p = PERSONAS[id];
 					const selected = persona === id;
@@ -149,30 +149,23 @@ const PersonaSelect: FC = () => {
 								}
 							`}
 						>
-							{/* Shimmer sweep (inside card, clipped to rounded corners) */}
+							{/* Shimmer sweep (clipped inside card) */}
 							<div className="absolute inset-0 rounded-2xl overflow-hidden pointer-events-none">
 								<div className={`shimmer-sweep ${selected ? "active" : ""}`} />
 							</div>
 
-							{/* Avatar — square, overflows above card */}
-							<div
+							{/* Avatar — no container, bottom flush with card bottom, top 1/3 overflows */}
+							<img
+								src={`/characters/${id}/avatars/neutral.webp`}
+								alt={p.name}
+								draggable={false}
 								className={`
-									relative shrink-0 w-14 h-14 -mt-8 mb-0
-									rounded-xl overflow-hidden
-									ring-2 ring-white/60 dark:ring-zinc-700/60
-									shadow-lg
-									transition-all duration-300 ease-out z-10
-									bg-gradient-to-br from-zinc-100 to-zinc-200 dark:from-zinc-800 dark:to-zinc-700
-									${selected ? "scale-110 -translate-y-1 shadow-xl" : "group-hover:scale-105 group-hover:-translate-y-0.5"}
+									relative shrink-0 w-14 h-14 -mt-7 self-end
+									object-cover object-top
+									transition-all duration-300 ease-out z-10 select-none
+									${selected ? "scale-110 -translate-y-1 drop-shadow-xl" : "group-hover:scale-105 group-hover:-translate-y-0.5 drop-shadow-md"}
 								`}
-							>
-								<img
-									src={`/characters/${id}/avatars/neutral.webp`}
-									alt={p.name}
-									className="w-full h-full object-cover"
-									draggable={false}
-								/>
-							</div>
+							/>
 
 							{/* Info */}
 							<div className="flex-1 text-left min-w-0 relative z-10">
