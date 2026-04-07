@@ -767,13 +767,13 @@ function AutoSpeakWatcher() {
 
 		wasRunning.current = isRunning;
 
-		// ── Polling: feed full text during streaming ──
+		// ── Polling: feed full text during streaming (500ms to reduce CPU) ──
 		if (!isRunning || !ttsRef.current) return;
 		const tts = ttsRef.current;
 		const interval = setInterval(() => {
 			const fullText = getLastAssistantText(aui);
 			if (fullText) tts.feedText(fullText);
-		}, 200);
+		}, 500);
 		return () => clearInterval(interval);
 	}, [isRunning, autoTTS, voiceMode.active, aui]);
 

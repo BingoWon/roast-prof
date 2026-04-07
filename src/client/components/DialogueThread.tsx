@@ -139,12 +139,16 @@ export const DialogueThread: FC<{
 		[persona],
 	);
 
+	const headers = useMemo(
+		() => ({
+			"x-timezone": Intl.DateTimeFormat().resolvedOptions().timeZone,
+		}),
+		[],
+	);
 	const { object, submit, isLoading, error } = useObject({
 		api: "/api/dialogue",
 		schema,
-		headers: {
-			"x-timezone": Intl.DateTimeFormat().resolvedOptions().timeZone,
-		},
+		headers,
 	});
 
 	const lastPoseRef = useRef("neutral");

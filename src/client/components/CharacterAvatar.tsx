@@ -1,17 +1,23 @@
-import { type FC, useState } from "react";
+import { memo, useState } from "react";
 import type { PersonaId } from "../../worker/model";
 import { PERSONAS } from "../../worker/model";
 
 /**
  * Circular character avatar loaded from /characters/{persona}/avatars/neutral.webp.
  * Falls back to emoji on error. Used throughout the app to represent personas.
+ * Memoized to avoid re-renders in lists (sidebar thread items, persona switcher).
  */
-export const CharacterAvatar: FC<{
+export const CharacterAvatar = memo(function CharacterAvatar({
+	persona,
+	pose = "neutral",
+	size = "md",
+	className = "",
+}: {
 	persona: PersonaId;
 	pose?: string;
 	size?: "xs" | "sm" | "md" | "lg" | "xl";
 	className?: string;
-}> = ({ persona, pose = "neutral", size = "md", className = "" }) => {
+}) {
 	const p = PERSONAS[persona];
 	const src = `/characters/${persona}/avatars/${pose}.webp`;
 	const [errSrc, setErrSrc] = useState("");
@@ -43,10 +49,11 @@ export const CharacterAvatar: FC<{
 				<img
 					src={src}
 					alt={p.name}
+					loading="lazy"
 					className="w-full h-full object-cover"
 					onError={() => setErrSrc(src)}
 				/>
 			)}
 		</div>
 	);
-};
+});
