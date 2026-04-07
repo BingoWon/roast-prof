@@ -287,16 +287,18 @@ function App() {
 						ref={containerRef}
 						className={`flex-1 flex h-full overflow-hidden pt-2 pb-2 gap-1.5 z-10 ${layout.leftCollapsed ? "pl-0" : "pl-2"} ${layout.rightCollapsed ? "pr-0" : "pr-2"}`}
 					>
-						{/* 左栏 */}
-						{layout.leftCollapsed ? (
-							!layout.immersive && (
-								<CollapsedHandle direction="left" onClick={layout.toggleLeft} />
-							)
-						) : (
-							<div
-								style={{ width: layout.leftWidth }}
-								className="h-full flex-shrink-0 overflow-hidden rounded-2xl bg-white/50 dark:bg-zinc-900/50 backdrop-blur-sm border border-white/60 dark:border-zinc-700/50 transition-[width] duration-300 ease-out"
-							>
+						{/* 左栏 (always in DOM for width transition) */}
+						{layout.leftCollapsed && !layout.immersive && (
+							<CollapsedHandle direction="left" onClick={layout.toggleLeft} />
+						)}
+						<div
+							style={{
+								width: layout.leftCollapsed ? 0 : layout.leftWidth,
+								opacity: layout.leftCollapsed ? 0 : 1,
+							}}
+							className="h-full flex-shrink-0 overflow-hidden rounded-2xl bg-white/50 dark:bg-zinc-900/50 backdrop-blur-sm border border-white/60 dark:border-zinc-700/50 transition-[width,opacity] duration-300 ease-out"
+						>
+							<div className="h-full min-w-[200px]">
 								<ThreadListSidebar
 									activeDocId={activeDoc?.id ?? null}
 									activeTab={sidebarTab}
@@ -304,7 +306,7 @@ function App() {
 									onDocSelect={handleDocSelect}
 								/>
 							</div>
-						)}
+						</div>
 
 						{/* 左分割线 */}
 						{!layout.leftCollapsed && <Divider {...layout.leftDividerProps} />}
@@ -469,19 +471,18 @@ function App() {
 							<Divider {...layout.rightDividerProps} />
 						)}
 
-						{/* 右栏 */}
-						{layout.rightCollapsed ? (
-							!layout.immersive && (
-								<CollapsedHandle
-									direction="right"
-									onClick={layout.toggleRight}
-								/>
-							)
-						) : (
-							<div
-								style={{ width: layout.rightWidth }}
-								className="h-full flex-shrink-0 overflow-hidden rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200/60 dark:border-zinc-700/50 transition-[width] duration-300 ease-out"
-							>
+						{/* 右栏 (always in DOM for width transition) */}
+						{layout.rightCollapsed && !layout.immersive && (
+							<CollapsedHandle direction="right" onClick={layout.toggleRight} />
+						)}
+						<div
+							style={{
+								width: layout.rightCollapsed ? 0 : layout.rightWidth,
+								opacity: layout.rightCollapsed ? 0 : 1,
+							}}
+							className="h-full flex-shrink-0 overflow-hidden rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200/60 dark:border-zinc-700/50 transition-[width,opacity] duration-300 ease-out"
+						>
+							<div className="h-full min-w-[280px]">
 								<ErrorBoundary>
 									<RightPanel
 										recipe={recipe}
@@ -495,7 +496,7 @@ function App() {
 									/>
 								</ErrorBoundary>
 							</div>
-						)}
+						</div>
 					</div>
 					{/* Dialogue mode: fixed bottom overlay (outside flex layout) */}
 					<DialogueOverlay

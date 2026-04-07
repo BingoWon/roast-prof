@@ -393,12 +393,15 @@ export const DialogueThread: FC<{
 				// ── Pose Mode: Hades 2 style — large character left, dialogue right ──
 				<div className="flex items-end gap-0 pb-0">
 					{/* Character pose — flush left+bottom, h=2/3 viewport, max-w=1/3 viewport */}
-					<div className="shrink-0 h-[66vh] max-w-[33vw] relative z-10">
+					<div className="shrink-0 h-[66dvh] max-w-[33vw] relative z-10">
 						<PoseImage persona={persona} pose={currentPose} />
 					</div>
 
-					{/* Dialogue panel */}
-					<div className="flex-1 min-w-0 -ml-4 space-y-2 pb-4 pr-4">
+					{/* Dialogue panel — right edge leaves 1/3 screen gap, max-h=50vh */}
+					<div
+						className="min-w-0 -ml-4 space-y-2 pb-4 max-h-[50vh] overflow-y-auto"
+						style={{ marginRight: "33vw" }}
+					>
 						{/* Name plate + toolbar */}
 						<div className="flex items-center justify-between ml-6">
 							<div>
