@@ -25,6 +25,7 @@ import {
 	Paperclip,
 	Pencil,
 	RefreshCw,
+	Sparkles,
 	Square,
 	Volume2,
 	VolumeOff,
@@ -32,13 +33,19 @@ import {
 } from "lucide-react";
 import { createContext, type FC, useEffect, useRef, useState } from "react";
 import { PERSONAS, type PersonaId } from "../worker/model";
+import { CharacterAvatar } from "./components/CharacterAvatar";
 import { ReasoningPart } from "./components/message/ReasoningPart";
 import type { Recipe } from "./components/RecipePanel";
 import { ToolCallFallback } from "./components/tools/ToolCallFallback";
 import { Button } from "./components/ui/button";
 import { MarkdownText } from "./components/ui/markdown-text";
 import { TooltipIconButton } from "./components/ui/tooltip-icon-button";
-import { setThreadPersona, useAutoTTS, usePersona } from "./RuntimeProvider";
+import {
+	setThreadPersona,
+	useAutoTTS,
+	useDialogueMode,
+	usePersona,
+} from "./RuntimeProvider";
 
 // ── Recipe Update Context ────────────────────────────────────────────────────
 
@@ -104,7 +111,7 @@ const ComposerAttachment: FC = () => (
 
 // ── Persona card list (derived from single source of truth in PERSONAS) ─────
 
-const PERSONA_IDS: PersonaId[] = ["blank_f", "blank_m", "professor", "keli"];
+const PERSONA_IDS: PersonaId[] = ["raiden", "keli", "shiyu", "yixuan"];
 
 // ── Persona Selection (replaces old ThreadWelcome) ──────────────────────────
 
@@ -152,18 +159,14 @@ const PersonaSelect: FC = () => {
 								style={{ color: p.accentColor }}
 							/>
 
-							{/* Emoji avatar */}
+							{/* Character avatar */}
 							<div
 								className={`
-									flex-shrink-0 flex items-center justify-center
-									w-14 h-14 rounded-xl text-3xl
-									transition-transform duration-200
+									flex-shrink-0 transition-transform duration-200
 									${selected ? "scale-110" : "group-hover:scale-105"}
-									bg-white/60 dark:bg-white/5 backdrop-blur-sm
-									ring-1 ring-black/5 dark:ring-white/10
 								`}
 							>
-								{p.emoji}
+								<CharacterAvatar persona={id} size="lg" />
 							</div>
 
 							{/* Info */}
@@ -280,7 +283,7 @@ const PersonaSwitcher: FC = () => {
 				className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition-all hover:bg-zinc-100 dark:hover:bg-zinc-700 active:scale-95 cursor-pointer text-base"
 				title={`当前角色：${current.name}`}
 			>
-				{current.emoji}
+				<CharacterAvatar persona={persona} size="sm" />
 			</button>
 
 			{open && (
@@ -301,7 +304,7 @@ const PersonaSwitcher: FC = () => {
 									${active ? "bg-zinc-100 dark:bg-zinc-700" : "hover:bg-zinc-50 dark:hover:bg-zinc-700/50"}
 								`}
 							>
-								<span className="text-lg shrink-0">{c.emoji}</span>
+								<CharacterAvatar persona={id} size="sm" />
 								<div className="min-w-0 flex-1">
 									<div className="text-xs font-medium text-zinc-800 dark:text-zinc-200 truncate">
 										{c.name}
@@ -344,11 +347,26 @@ const AutoTTSToggle: FC = () => {
 	);
 };
 
+const DialogueModeButton: FC = () => {
+	const { enterDialogueMode } = useDialogueMode();
+	return (
+		<button
+			type="button"
+			onClick={enterDialogueMode}
+			className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-zinc-400 dark:text-zinc-500 transition-all hover:bg-purple-50 dark:hover:bg-purple-950/30 hover:text-purple-500 active:scale-95 cursor-pointer"
+			title="剧情模式"
+		>
+			<Sparkles className="h-4 w-4" />
+		</button>
+	);
+};
+
 const ComposerAction: FC = () => (
 	<div className="relative mx-2 mb-2 flex items-center justify-between">
 		<div className="flex items-center gap-1">
 			<PersonaSwitcher />
 			<AutoTTSToggle />
+			<DialogueModeButton />
 
 			<ComposerPrimitive.AddAttachment
 				className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-zinc-400 dark:text-zinc-500 transition-all hover:bg-zinc-100 dark:hover:bg-zinc-700 hover:text-zinc-600 dark:hover:text-zinc-300 active:scale-95 cursor-pointer"

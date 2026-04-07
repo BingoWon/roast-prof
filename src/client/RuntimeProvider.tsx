@@ -87,6 +87,24 @@ const VoiceModeCtx = createContext<{
 
 export const useVoiceMode = () => useContext(VoiceModeCtx);
 
+// ── Dialogue Mode Context ────────────────────────────────────────────────
+
+export interface DialogueModeState {
+	active: boolean;
+}
+
+const DialogueModeCtx = createContext<{
+	dialogueMode: DialogueModeState;
+	enterDialogueMode: () => void;
+	exitDialogueMode: () => void;
+}>({
+	dialogueMode: { active: false },
+	enterDialogueMode: () => {},
+	exitDialogueMode: () => {},
+});
+
+export const useDialogueMode = () => useContext(DialogueModeCtx);
+
 // ── ElevenLabs Adapters (stable module-scope instances) ─────────────────────
 
 const scribeAdapter = new ElevenLabsScribeAdapter({
@@ -171,7 +189,7 @@ const threadListAdapter: RemoteThreadListAdapter = {
 			persona: string;
 		}[];
 		for (const t of threads) {
-			threadPersonaMap.set(t.id, (t.persona ?? "professor") as PersonaId);
+			threadPersonaMap.set(t.id, (t.persona ?? "raiden") as PersonaId);
 		}
 		return {
 			threads: threads.map((t) => ({
@@ -523,26 +541,51 @@ ${truncated}${chatSummary ? `\n\n# 之前的文字对话记录（供参考）\n$
 		[voiceMode, enterVoiceMode, exitVoiceMode],
 	);
 
+	// ── Dialogue mode ─────────────────────────────────────────────────────
+	const [dialogueMode, setDialogueMode] = useState<DialogueModeState>({
+		active: false,
+	});
+
+	const enterDialogueMode = useCallback(() => {
+		// Stop any ongoing TTS/speech
+		try {
+			const speech = runtime.thread.getState().speech;
+			if (speech) runtime.thread.stopSpeaking();
+		} catch {}
+		setDialogueMode({ active: true });
+	}, [runtime]);
+
+	const exitDialogueMode = useCallback(() => {
+		setDialogueMode({ active: false });
+	}, []);
+
+	const dialogueModeCtx = useMemo(
+		() => ({ dialogueMode, enterDialogueMode, exitDialogueMode }),
+		[dialogueMode, enterDialogueMode, exitDialogueMode],
+	);
+
 	return (
 		<PersonaCtx value={personaCtx}>
 			<AutoTTSCtx value={autoTTSCtx}>
 				<VoiceModeCtx value={voiceModeCtx}>
-					<AssistantRuntimeProvider runtime={runtime}>
-						<PersonaSync />
-						<AutoSpeakWatcher />
-						{/* Each tool UI matches a backend tool by toolName */}
-						<AskUserToolUI />
-						<SearchToolUI />
-						<AcademicSearchToolUI />
-						<DocSuggestToolUI />
-						<DocSearchToolUI />
-						<OpenDocToolUI />
-						<HighlightDocToolUI />
-						<ReadDocToolUI />
-						<RecipeToolUI />
-						<SaveMemoryToolUI />
-						{children}
-					</AssistantRuntimeProvider>
+					<DialogueModeCtx value={dialogueModeCtx}>
+						<AssistantRuntimeProvider runtime={runtime}>
+							<PersonaSync />
+							<AutoSpeakWatcher />
+							{/* Each tool UI matches a backend tool by toolName */}
+							<AskUserToolUI />
+							<SearchToolUI />
+							<AcademicSearchToolUI />
+							<DocSuggestToolUI />
+							<DocSearchToolUI />
+							<OpenDocToolUI />
+							<HighlightDocToolUI />
+							<ReadDocToolUI />
+							<RecipeToolUI />
+							<SaveMemoryToolUI />
+							{children}
+						</AssistantRuntimeProvider>
+					</DialogueModeCtx>
 				</VoiceModeCtx>
 			</AutoTTSCtx>
 		</PersonaCtx>

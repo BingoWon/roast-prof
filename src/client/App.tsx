@@ -13,6 +13,7 @@ import {
 import { type FC, useCallback, useEffect, useRef, useState } from "react";
 import { Chat, type HighlightAction, type HighlightItem } from "./Chat";
 import { CollapsedHandle } from "./components/CollapsedHandle";
+import { DialogueThread } from "./components/DialogueThread";
 import { Divider } from "./components/Divider";
 import { DocumentViewer } from "./components/DocumentViewer";
 import { ErrorBoundary } from "./components/ErrorBoundary";
@@ -30,7 +31,12 @@ import { VoiceThread } from "./components/VoiceThread";
 import { useResizableLayout } from "./hooks/useResizableLayout";
 import { useUrlSync } from "./hooks/useUrlSync";
 import { getFileIcon } from "./lib/file-icons";
-import { RuntimeProvider, useVoiceMode } from "./RuntimeProvider";
+import {
+	RuntimeProvider,
+	useDialogueMode,
+	usePersona,
+	useVoiceMode,
+} from "./RuntimeProvider";
 
 function ssRead<T>(key: string, fallback: T): T {
 	try {
@@ -247,7 +253,7 @@ function App() {
 							⚡
 						</div>
 						<h1 className="text-4xl font-bold tracking-tight text-zinc-900 dark:text-zinc-100">
-							暴躁教授
+							雷电教授
 						</h1>
 						<p className="text-zinc-500 dark:text-zinc-400 text-lg leading-relaxed">
 							AI
@@ -615,6 +621,12 @@ const RightPanel: FC<{
 	registerImprove?: (fn: () => void) => void;
 }> = (props) => {
 	const { voiceMode, exitVoiceMode } = useVoiceMode();
+	const { dialogueMode, exitDialogueMode } = useDialogueMode();
+	const { persona } = usePersona();
+
+	if (dialogueMode.active) {
+		return <DialogueThread persona={persona} onExit={exitDialogueMode} />;
+	}
 
 	if (voiceMode.active && voiceMode.docTitle) {
 		return (

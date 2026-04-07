@@ -7,6 +7,7 @@ import type {
 } from "../lib/elevenlabs-voice-adapter";
 import { startVoiceSession } from "../lib/elevenlabs-voice-adapter";
 import { usePersona } from "../RuntimeProvider";
+import { CharacterAvatar } from "./CharacterAvatar";
 import { VoiceOrb, type VoiceOrbState } from "./voice/VoiceOrb";
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
@@ -145,7 +146,7 @@ export const VoiceThread: FC<{
 			{/* Header */}
 			<div className="flex items-center justify-between px-4 py-3 border-b border-divider dark:border-divider-dark shrink-0">
 				<div className="flex items-center gap-2 min-w-0">
-					<span className="text-lg">{p.emoji}</span>
+					<CharacterAvatar persona={persona} size="sm" />
 					<div className="min-w-0">
 						<div className="text-xs font-semibold text-zinc-800 dark:text-zinc-200 truncate">
 							{p.name} · 语音陪读
@@ -169,7 +170,7 @@ export const VoiceThread: FC<{
 			<div ref={viewportRef} className="flex-1 overflow-y-auto px-4 pt-4 pb-2">
 				{messages.length === 0 && (
 					<div className="flex flex-col items-center justify-center h-full gap-2 text-center">
-						<span className="text-4xl">{p.emoji}</span>
+						<CharacterAvatar persona={persona} size="xl" />
 						<div className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
 							{p.name}
 						</div>

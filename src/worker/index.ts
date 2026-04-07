@@ -2,11 +2,14 @@ import {
 	convertToModelMessages,
 	createUIMessageStream,
 	createUIMessageStreamResponse,
+	Output,
 	stepCountIs,
 	streamText,
 } from "ai";
 import { and, eq } from "drizzle-orm";
 import { Hono } from "hono";
+import type { DialogueHistoryEntry } from "../shared/dialogue";
+import { buildDialogueTurnSchema } from "../shared/dialogue";
 import { getUserId } from "./auth";
 import {
 	createDb,
@@ -29,11 +32,15 @@ import {
 	searchMemories,
 } from "./memory";
 import {
+	createDialogueModel,
 	createModel,
 	createTitleModel,
 	DEFAULT_PERSONA,
+	getPoses,
 	getSystemPrompt,
 	isValidPersona,
+	PERSONAS,
+	type PersonaId,
 } from "./model";
 import {
 	checkDocByHash,
@@ -930,6 +937,69 @@ app.post("/api/chat", async (c) => {
 	} catch (error: unknown) {
 		const msg = error instanceof Error ? error.message : "未知错误";
 		log.error({ module: "chat", msg });
+		return c.json({ error: msg }, 500);
+	}
+});
+
+// ── Dialogue Mode (streaming structured output, no tools) ───────────────────
+
+/** Returns available poses for a persona (used by frontend). */
+app.get("/api/dialogue/poses/:persona", (c) => {
+	const personaRaw = c.req.param("persona");
+	const persona: PersonaId = isValidPersona(personaRaw)
+		? personaRaw
+		: DEFAULT_PERSONA;
+	return c.json(getPoses(persona));
+});
+
+app.post("/api/dialogue", async (c) => {
+	try {
+		const userId = await requireUserId(c);
+		if (!userId) return c.json({ error: "未授权" }, 401);
+
+		const { history, persona: personaRaw } = await c.req.json<{
+			history: DialogueHistoryEntry[];
+			persona: string;
+		}>();
+
+		const persona: PersonaId = isValidPersona(personaRaw)
+			? personaRaw
+			: DEFAULT_PERSONA;
+		const p = PERSONAS[persona];
+		const poses = getPoses(persona);
+
+		// Build dynamic schema with persona-specific poses
+		const schema = buildDialogueTurnSchema(poses as [string, ...string[]]);
+
+		// Build dialogue system prompt
+		const systemPrompt = `${p.prompt}
+
+# 剧情对话模式规则
+- 你正在与用户进行角色扮演式的剧情对话
+- 你的回复必须严格按照指定的 JSON 结构输出
+- speech 字段必须是纯文本，禁止使用任何 markdown 格式
+- pose 字段必须从以下选项中选择最贴切的姿态：${poses.join("、")}
+- choices 字段必须提供 1-3 个用户可能的回复选项，引导对话走向不同方向
+- 保持角色一致性，每句话都要符合你的人设
+- preEffect / postEffect 是可选的视觉特效，仅在剧情高潮、惊喜、愤怒等强烈情绪时使用`;
+
+		const messages = history.map((entry) => ({
+			role: entry.role as "user" | "assistant",
+			content: entry.speech,
+		}));
+
+		const model = createDialogueModel(c.env);
+		const result = streamText({
+			model,
+			output: Output.object({ schema }),
+			system: systemPrompt,
+			messages,
+		});
+
+		return result.toTextStreamResponse();
+	} catch (error: unknown) {
+		const msg = error instanceof Error ? error.message : "未知错误";
+		log.error({ module: "dialogue", msg });
 		return c.json({ error: msg }, 500);
 	}
 });

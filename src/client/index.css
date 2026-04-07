@@ -97,3 +97,65 @@ body {
 .dark ::-webkit-scrollbar-thumb:hover {
 	background: rgba(255, 255, 255, 0.2);
 }
+
+/* ── Dialogue mode effects ───────────────────────────────────────────────── */
+
+.animate-shake {
+	animation: shake 0.5s ease-in-out;
+}
+@keyframes shake {
+	0%,
+	100% {
+		transform: translateX(0);
+	}
+	20% {
+		transform: translateX(-6px);
+	}
+	40% {
+		transform: translateX(6px);
+	}
+	60% {
+		transform: translateX(-4px);
+	}
+	80% {
+		transform: translateX(4px);
+	}
+}
+
+.animate-flash {
+	animation: flash 0.3s ease-out;
+}
+@keyframes flash {
+	0% {
+		filter: brightness(2);
+	}
+	100% {
+		filter: brightness(1);
+	}
+}
+
+@keyframes confetti-fall {
+	0% {
+		transform: translate(0, 0) scale(1);
+		opacity: 1;
+	}
+	100% {
+		transform: translate(var(--x, 30px), 120px) scale(0.3);
+		opacity: 0;
+	}
+}
+.confetti-particle {
+	--x: 0px;
+}
+.confetti-particle:nth-child(odd) {
+	--x: -30px;
+}
+.confetti-particle:nth-child(3n) {
+	--x: 50px;
+}
+.confetti-particle:nth-child(5n) {
+	--x: -50px;
+}
+.confetti-particle:nth-child(7n) {
+	--x: 20px;
+}

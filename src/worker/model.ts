@@ -1,11 +1,21 @@
 import { createOpenAI } from "@ai-sdk/openai";
 import { extractReasoningMiddleware, wrapLanguageModel } from "ai";
 import { transformReasoningSSE } from "./openrouter";
-import { blankF, blankM, keli, professor } from "./personas";
+import { keli, raiden, shiyu, yixuan } from "./personas";
 
 // ── Persona Types & Registry ───────────────────────────────────────────────
 
-export type PersonaId = "blank_f" | "blank_m" | "professor" | "keli";
+export type PersonaId = "raiden" | "keli" | "shiyu" | "yixuan";
+
+/** Common poses shared across all personas. */
+export const BASE_POSES = [
+	"neutral",
+	"happy",
+	"sad",
+	"angry",
+	"surprised",
+	"thoughtful",
+] as const;
 
 export interface Persona {
 	// Display
@@ -25,6 +35,16 @@ export interface Persona {
 	firstMessages: string[];
 	// LLM
 	prompt: string;
+	// Dialogue mode: per-persona pose set (filenames without extension)
+	// Merged with BASE_POSES at runtime. Images at /characters/{id}/poses/{pose}.webp
+	poses?: string[];
+}
+
+/** Get the full pose list for a persona (base + persona-specific). */
+export function getPoses(personaId: PersonaId): string[] {
+	const persona = PERSONAS[personaId];
+	const extra = persona.poses ?? [];
+	return [...new Set([...BASE_POSES, ...extra])];
 }
 
 const TOOL_INSTRUCTIONS = `
@@ -54,13 +74,13 @@ const TOOL_INSTRUCTIONS = `
 对于需要深入思考的问题，充分输出推理过程。`;
 
 export const PERSONAS: Record<PersonaId, Persona> = {
-	blank_f: blankF,
-	blank_m: blankM,
-	professor,
+	raiden,
 	keli,
+	shiyu,
+	yixuan,
 };
 
-export const DEFAULT_PERSONA: PersonaId = "professor";
+export const DEFAULT_PERSONA: PersonaId = "raiden";
 
 export function isValidPersona(id: string): id is PersonaId {
 	return id in PERSONAS;
@@ -91,11 +111,19 @@ export function createModel(env: Env) {
 	});
 }
 
+/** Dialogue mode: separate provider + model, no reasoning middleware. */
+export function createDialogueModel(env: Env) {
+	const provider = createOpenAI({
+		baseURL: env.DIALOGUE_BASE_URL || env.LLM_BASE_URL,
+		apiKey: env.DIALOGUE_API_KEY || env.LLM_API_KEY,
+	});
+	return provider.chat(env.DIALOGUE_MODEL || env.LLM_MODEL);
+}
+
 export function createTitleModel(env: Env) {
-	const titleModel = env.LLM_MODEL;
 	const provider = createOpenAI({
 		baseURL: env.LLM_BASE_URL,
 		apiKey: env.LLM_API_KEY,
 	});
-	return provider.chat(titleModel);
+	return provider.chat(env.LLM_MODEL);
 }
