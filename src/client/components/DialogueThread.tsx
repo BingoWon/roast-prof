@@ -174,7 +174,10 @@ export const DialogueThread: FC<{
 		schema,
 	});
 
-	const currentPose = object?.pose ?? "neutral";
+	// Keep last known pose so it doesn't flash to "neutral" between turns
+	const lastPoseRef = useRef("neutral");
+	if (object?.pose) lastPoseRef.current = object.pose;
+	const currentPose = lastPoseRef.current;
 	const currentSpeech = object?.speech ?? "";
 	const currentChoices = object?.choices;
 	const hasChoices =
@@ -388,16 +391,16 @@ export const DialogueThread: FC<{
 
 			{displayMode === "pose" ? (
 				// ── Pose Mode: Hades 2 style — large character left, dialogue right ──
-				<div className="flex items-end gap-0 px-4 pb-4">
-					{/* Character pose — anchored to bottom-left */}
-					<div className="shrink-0 w-48 h-72 -mb-4 relative z-10">
+				<div className="flex items-end gap-0 pb-0">
+					{/* Character pose — flush left+bottom, h=2/3 viewport, max-w=1/3 viewport */}
+					<div className="shrink-0 h-[66vh] max-w-[33vw] relative z-10">
 						<PoseImage persona={persona} pose={currentPose} />
 					</div>
 
 					{/* Dialogue panel */}
-					<div className="flex-1 min-w-0 -ml-6 space-y-2 pb-1">
+					<div className="flex-1 min-w-0 -ml-4 space-y-2 pb-4 pr-4">
 						{/* Name plate + toolbar */}
-						<div className="flex items-center justify-between ml-8">
+						<div className="flex items-center justify-between ml-6">
 							<div>
 								<span className="text-sm font-bold text-zinc-800 dark:text-zinc-100">
 									{p.name}
