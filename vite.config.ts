@@ -28,18 +28,28 @@ export default defineConfig({
 		entries: ["index.html", "src/client/**/*.{ts,tsx}"],
 	},
 	build: {
+		target: "esnext",
 		rollupOptions: {
 			output: {
-				manualChunks: {
-					react: ["react", "react-dom"],
-					"assistant-ui": [
-						"@assistant-ui/react",
-						"@assistant-ui/react-ai-sdk",
-						"@assistant-ui/react-markdown",
-					],
-					"ai-sdk": ["ai", "@ai-sdk/react"],
-					clerk: ["@clerk/react"],
-					markdown: ["react-markdown", "remark-gfm"],
+				// Vite 8 / Rolldown requires function form for manualChunks
+				manualChunks(id: string) {
+					if (
+						id.includes("node_modules/react-dom") ||
+						id.includes("node_modules/react/")
+					)
+						return "react";
+					if (id.includes("node_modules/@assistant-ui/")) return "assistant-ui";
+					if (
+						id.includes("node_modules/ai/") ||
+						id.includes("node_modules/@ai-sdk/")
+					)
+						return "ai-sdk";
+					if (id.includes("node_modules/@clerk/")) return "clerk";
+					if (
+						id.includes("node_modules/react-markdown") ||
+						id.includes("node_modules/remark-gfm")
+					)
+						return "markdown";
 				},
 			},
 		},

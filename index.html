@@ -6,9 +6,20 @@
 		<link rel="icon" type="image/png" href="/favicon.png" />
 		<meta name="description" content="雷电教授 — AI 论文陪读导师，多角色人设陪你在知识的海洋里畅游" />
 		<title>雷电教授</title>
+		<!-- Fonts -->
 		<link rel="preconnect" href="https://fonts.googleapis.com" />
 		<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 		<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=ZCOOL+XiaoWei&display=swap" rel="stylesheet" />
+		<!-- Preload persona avatars (above-fold in PersonaSelect) -->
+		<link rel="preload" as="image" type="image/webp" href="/characters/raiden/avatars/neutral.webp" />
+		<link rel="preload" as="image" type="image/webp" href="/characters/keli/avatars/neutral.webp" />
+		<link rel="preload" as="image" type="image/webp" href="/characters/shiyu/avatars/neutral.webp" />
+		<link rel="preload" as="image" type="image/webp" href="/characters/yixuan/avatars/neutral.webp" />
+		<!-- Preconnect to external APIs (DNS + TLS handshake before first request) -->
+		<link rel="preconnect" href="https://openrouter.ai" crossorigin />
+		<link rel="preconnect" href="https://api.elevenlabs.io" crossorigin />
+		<link rel="dns-prefetch" href="https://openrouter.ai" />
+		<link rel="dns-prefetch" href="https://api.elevenlabs.io" />
 	</head>
 	<body>
 		<div id="root"></div>
