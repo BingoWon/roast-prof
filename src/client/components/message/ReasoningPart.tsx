@@ -42,12 +42,6 @@ export const ReasoningPart: FC = () => {
 
 	if (!reasoning?.text) return null;
 
-	// Hide duplicate reasoning: if not currently streaming and never had a
-	// measured duration, this is a copy from a previous continuation round.
-	if (!isStreaming && !hasEverStreamedRef.current && duration === undefined) {
-		return null;
-	}
-
 	const label = isStreaming
 		? "思考中…"
 		: duration !== undefined
