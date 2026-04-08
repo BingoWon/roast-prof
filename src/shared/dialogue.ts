@@ -33,15 +33,11 @@ export type Effect = (typeof EFFECTS)[number];
 export function buildDialogueTurnSchema(poses: [string, ...string[]]) {
 	return z.object({
 		pose: z.enum(poses).describe("Character pose for portrait display"),
-		preEffect: z
+		effect: z
 			.enum(EFFECTS)
 			.nullable()
-			.describe("Visual effect before speech, or null if none"),
+			.describe("Optional visual effect to play with this turn, or null"),
 		speech: z.string().describe("Plain text dialogue, no markdown"),
-		postEffect: z
-			.enum(EFFECTS)
-			.nullable()
-			.describe("Visual effect after speech, or null if none"),
 		choices: z
 			.array(z.string())
 			.min(1)

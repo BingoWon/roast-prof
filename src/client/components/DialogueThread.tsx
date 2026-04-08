@@ -256,7 +256,6 @@ export const DialogueThread: FC<{
 	useEffect(() => {
 		if (wasLoadingRef.current && !isLoading && object?.speech) {
 			ttsRef.current?.flush(object.speech);
-			triggerEffect(object.postEffect);
 			const assistantSpeech = object.speech as string;
 			persistDialogueTurn({ role: "assistant", speech: assistantSpeech });
 			setTurns((prev) => [
@@ -271,14 +270,15 @@ export const DialogueThread: FC<{
 		wasLoadingRef.current = isLoading;
 	}, [isLoading, object]);
 
-	const preEffectTriggered = useRef(false);
+	// Fire visual effect once when it first streams in
+	const effectTriggered = useRef(false);
 	useEffect(() => {
-		if (isLoading && object?.preEffect && !preEffectTriggered.current) {
-			triggerEffect(object.preEffect);
-			preEffectTriggered.current = true;
+		if (isLoading && object?.effect && !effectTriggered.current) {
+			triggerEffect(object.effect);
+			effectTriggered.current = true;
 		}
-		if (!isLoading) preEffectTriggered.current = false;
-	}, [isLoading, object?.preEffect]);
+		if (!isLoading) effectTriggered.current = false;
+	}, [isLoading, object?.effect]);
 
 	const handleChoice = useCallback(
 		(choice: string) => sendTurn(choice),
