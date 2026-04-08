@@ -97,6 +97,10 @@ export const DocumentsPanel: FC<{
 			".docx",
 		];
 		if (!SUPPORTED.some((e) => file.name.toLowerCase().endsWith(e))) return;
+		if (file.size > 15 * 1024 * 1024) {
+			alert(`文件过大（${(file.size / 1024 / 1024).toFixed(1)} MB），最大支持 15 MB`);
+			return;
+		}
 
 		const buffer = await file.arrayBuffer();
 		const digest = await crypto.subtle.digest("SHA-256", buffer);

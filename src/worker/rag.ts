@@ -53,18 +53,22 @@ export async function hashBuffer(buffer: ArrayBuffer): Promise<string> {
 
 // ── PaddleOCR Sync API ──────────────────────────────────────────────────────
 
+const OCR_TIMEOUT = 180_000;
+const MAX_OCR_FILE_SIZE = 15 * 1024 * 1024; // 15 MB
+
 async function parseWithPaddleOCR(
 	fileBuffer: ArrayBuffer,
 	token: string,
 	fileType: 0 | 1,
 	ocrUrl?: string,
 ): Promise<string> {
-	const bytes = new Uint8Array(fileBuffer);
-	let binary = "";
-	for (let i = 0; i < bytes.length; i++) {
-		binary += String.fromCharCode(bytes[i]);
+	if (fileBuffer.byteLength > MAX_OCR_FILE_SIZE) {
+		throw new Error(
+			`文件过大（${(fileBuffer.byteLength / 1024 / 1024).toFixed(1)} MB），OCR 最大支持 15 MB`,
+		);
 	}
-	const fileB64 = btoa(binary);
+
+	const fileB64 = Buffer.from(fileBuffer).toString("base64");
 
 	const OCR_ERRORS: Record<number, string> = {
 		403: "OCR 认证失败，请检查 Token",
@@ -79,7 +83,7 @@ async function parseWithPaddleOCR(
 	let res: Response;
 	try {
 		const controller = new AbortController();
-		const timeout = setTimeout(() => controller.abort(), 120_000);
+		const timeout = setTimeout(() => controller.abort(), OCR_TIMEOUT);
 		res = await fetch(ocrUrl || PADDLE_OCR_URL_DEFAULT, {
 			method: "POST",
 			headers: {
@@ -101,7 +105,7 @@ async function parseWithPaddleOCR(
 	} catch (e) {
 		const msg =
 			e instanceof Error && e.name === "AbortError"
-				? "OCR 解析超时（120s），请尝试更小的文件"
+				? "OCR 解析超时（180s），请尝试更小的文件"
 				: `OCR 网络错误: ${(e as Error).message}`;
 		throw new Error(msg);
 	}
