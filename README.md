@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <a href="https://study-dojo.bingow.workers.dev/"><strong>👉 立即体验（完全免费，无需部署）</strong></a>
+  <a href="https://study-dojo.thebinwang.com/"><strong>👉 立即体验（完全免费，无需部署）</strong></a>
 </p>
 
 ---
@@ -149,7 +149,7 @@ flowchart LR
 
 最快的方式——打开浏览器直接用，注册即可，完全免费：
 
-**👉 [https://study-dojo.bingow.workers.dev/](https://study-dojo.bingow.workers.dev/)**
+**👉 [https://study-dojo.thebinwang.com/](https://study-dojo.thebinwang.com/)**
 
 无需安装任何软件，无需配置环境变量，无需部署服务器。注册账号后即可上传论文、选择导师、开始学习。
 
@@ -279,4 +279,4 @@ pnpm dev
 
 如果你有好的角色创意或功能建议，也欢迎在 Issues 中讨论 💬
 
-不想折腾代码？没关系，直接到 [在线版](https://study-dojo.bingow.workers.dev/) 体验，用起来再说！
+不想折腾代码？没关系，直接到 [在线版](https://study-dojo.thebinwang.com/) 体验，用起来再说！
