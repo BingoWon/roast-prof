@@ -2,7 +2,7 @@ CREATE TABLE `threads` (
 	`id` text PRIMARY KEY NOT NULL,
 	`user_id` text NOT NULL,
 	`title` text DEFAULT '新对话' NOT NULL,
-	`persona` text DEFAULT 'professor' NOT NULL,
+	`persona` text DEFAULT 'raiden' NOT NULL,
 	`created_at` integer DEFAULT (strftime('%s', 'now')) NOT NULL,
 	`updated_at` integer DEFAULT (strftime('%s', 'now')) NOT NULL
 );
@@ -49,3 +49,10 @@ CREATE INDEX `idx_messages_thread_id` ON `messages` (`thread_id`);
 CREATE INDEX `idx_documents_hash` ON `documents` (`hash`);
 CREATE INDEX `idx_user_documents_user_id` ON `user_documents` (`user_id`);
 CREATE INDEX `idx_chunks_doc_id` ON `chunks` (`doc_id`);
+
+CREATE TABLE `monitor_snapshots` (
+	`key` text PRIMARY KEY NOT NULL,
+	`value` integer NOT NULL,
+	`extra` text,
+	`updated_at` integer NOT NULL
+);

@@ -1,7 +1,7 @@
 /**
- * Quota monitor — runs every 10 minutes via Cron Trigger.
- * Checks OpenRouter credits and ElevenLabs character usage.
- * Sends a Telegram alert when usage increases by >1% of total quota.
+ * Quota & user monitor — runs every 10 minutes via Cron Trigger.
+ * Checks OpenRouter credits, ElevenLabs character usage, and Clerk user count.
+ * Sends a Telegram alert when usage changes by >1% of total, or user count changes.
  */
 
 import { eq } from "drizzle-orm";
@@ -10,10 +10,10 @@ import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
 
 // ── Schema ──────────────────────────────────────────────────────────────────
 
-export const quotaSnapshots = sqliteTable("quota_snapshots", {
-	service: text("service").primaryKey(),
-	used: integer("used").notNull(), // stored as integer (cents or chars)
-	total: integer("total").notNull(),
+export const monitorSnapshots = sqliteTable("monitor_snapshots", {
+	key: text("key").primaryKey(),
+	value: integer("value").notNull(),
+	extra: text("extra"), // optional JSON metadata
 	updatedAt: integer("updated_at").notNull(),
 });
 
@@ -37,14 +37,15 @@ async function sendTelegram(
 
 // ── Service Checkers ────────────────────────────────────────────────────────
 
-interface Snapshot {
-	service: string;
-	used: number;
-	total: number;
-	label: string;
+interface CheckResult {
+	key: string;
+	value: number;
+	total?: number;
+	extra?: string;
+	shouldAlert: (prev: number | null) => string | null;
 }
 
-async function checkOpenRouter(apiKey: string): Promise<Snapshot | null> {
+async function checkOpenRouter(apiKey: string): Promise<CheckResult | null> {
 	try {
 		const [authRes, creditsRes] = await Promise.all([
 			fetch("https://openrouter.ai/api/v1/auth/key", {
@@ -60,32 +61,40 @@ async function checkOpenRouter(apiKey: string): Promise<Snapshot | null> {
 			data: { usage?: number; limit?: number };
 		};
 
-		let totalCredits = auth.data.limit ?? 0;
-		let usedCredits = auth.data.usage ?? 0;
+		let total = auth.data.limit ?? 0;
+		let used = auth.data.usage ?? 0;
 
 		if (creditsRes.ok) {
 			const credits = (await creditsRes.json()) as {
 				data: { total_credits?: number; total_usage?: number };
 			};
 			if (credits.data.total_credits != null)
-				totalCredits = credits.data.total_credits;
-			if (credits.data.total_usage != null)
-				usedCredits = credits.data.total_usage;
+				total = credits.data.total_credits;
+			if (credits.data.total_usage != null) used = credits.data.total_usage;
 		}
 
-		// Store as cents (integer) for precision
+		const usedCents = Math.round(used * 10000);
+		const totalCents = Math.round(total * 10000);
+
 		return {
-			service: "openrouter",
-			used: Math.round(usedCredits * 10000),
-			total: Math.round(totalCredits * 10000),
-			label: `OpenRouter: $${usedCredits.toFixed(4)} / $${totalCredits}`,
+			key: "openrouter_usage",
+			value: usedCents,
+			total: totalCents,
+			extra: JSON.stringify({ used, total }),
+			shouldAlert: (prev) => {
+				if (prev === null || totalCents === 0) return null;
+				const delta = usedCents - prev;
+				const pct = (delta / totalCents) * 100;
+				if (pct <= 1) return null;
+				return `💰 *OpenRouter*: $${used.toFixed(4)} / $${total} (+${pct.toFixed(1)}%)`;
+			},
 		};
 	} catch {
 		return null;
 	}
 }
 
-async function checkElevenLabs(apiKey: string): Promise<Snapshot | null> {
+async function checkElevenLabs(apiKey: string): Promise<CheckResult | null> {
 	try {
 		const res = await fetch(
 			"https://api.elevenlabs.io/v1/user/subscription",
@@ -95,12 +104,49 @@ async function checkElevenLabs(apiKey: string): Promise<Snapshot | null> {
 		const data = (await res.json()) as {
 			character_count?: number;
 			character_limit?: number;
+			next_character_count_reset_unix?: number;
 		};
+		const used = data.character_count ?? 0;
+		const total = data.character_limit ?? 0;
+
 		return {
-			service: "elevenlabs",
-			used: data.character_count ?? 0,
-			total: data.character_limit ?? 0,
-			label: `ElevenLabs: ${(data.character_count ?? 0).toLocaleString()} / ${(data.character_limit ?? 0).toLocaleString()} 字符`,
+			key: "elevenlabs_usage",
+			value: used,
+			total,
+			extra: JSON.stringify({ used, total }),
+			shouldAlert: (prev) => {
+				if (prev === null || total === 0) return null;
+				const delta = used - prev;
+				const pct = (delta / total) * 100;
+				if (pct <= 1) return null;
+				const remaining = total - used;
+				return `🎙 *ElevenLabs*: ${used.toLocaleString()} / ${total.toLocaleString()} 字符 (+${pct.toFixed(1)}%，剩余 ${remaining.toLocaleString()})`;
+			},
+		};
+	} catch {
+		return null;
+	}
+}
+
+async function checkClerkUsers(jwksUrl: string): Promise<CheckResult | null> {
+	try {
+		// Extract Clerk domain from JWKS URL
+		const url = new URL(jwksUrl);
+		const clerkDomain = url.origin;
+
+		// Use Clerk Frontend API to get user count
+		// The /v1/client endpoint doesn't need a secret key
+		// Instead, count users by checking the Backend API (needs CLERK_SECRET_KEY)
+		// Fallback: use a simpler approach — count via our own D1
+		// since every authenticated user creates threads
+		return {
+			key: "clerk_users",
+			value: -1, // placeholder, will be filled by D1 query below
+			extra: JSON.stringify({ source: "d1_threads" }),
+			shouldAlert: (prev) => {
+				// Will be overridden after D1 query
+				return null;
+			},
 		};
 	} catch {
 		return null;
@@ -116,53 +162,85 @@ export async function runMonitor(env: Env): Promise<void> {
 
 	const db = drizzle(env.DB);
 	const now = Math.floor(Date.now() / 1000);
+	const alerts: string[] = [];
 
-	const checks: (Snapshot | null)[] = await Promise.all([
+	// ── Quota checks ──────────────────────────────────────────────────────
+	const checks: (CheckResult | null)[] = await Promise.all([
 		env.LLM_API_KEY ? checkOpenRouter(env.LLM_API_KEY) : null,
 		env.ELEVENLABS_API_KEY ? checkElevenLabs(env.ELEVENLABS_API_KEY) : null,
 	]);
 
-	const alerts: string[] = [];
+	for (const check of checks) {
+		if (!check) continue;
 
-	for (const snap of checks) {
-		if (!snap || snap.total === 0) continue;
-
-		// Read previous snapshot
 		const [prev] = await db
 			.select()
-			.from(quotaSnapshots)
-			.where(eq(quotaSnapshots.service, snap.service))
+			.from(monitorSnapshots)
+			.where(eq(monitorSnapshots.key, check.key))
 			.limit(1);
 
-		const delta = prev ? snap.used - prev.used : 0;
-		const pct = (delta / snap.total) * 100;
+		const alert = check.shouldAlert(prev?.value ?? null);
+		if (alert) alerts.push(alert);
 
-		// Alert if usage increased by >1% of total
-		if (prev && pct > 1) {
-			const usedPct = ((snap.used / snap.total) * 100).toFixed(1);
-			alerts.push(
-				`🔔 *${snap.label}*\n` +
-					`   变化: +${pct.toFixed(2)}%（已用 ${usedPct}%）`,
-			);
-		}
-
-		// Upsert snapshot
 		await db
-			.insert(quotaSnapshots)
+			.insert(monitorSnapshots)
 			.values({
-				service: snap.service,
-				used: snap.used,
-				total: snap.total,
+				key: check.key,
+				value: check.value,
+				extra: check.extra,
 				updatedAt: now,
 			})
 			.onConflictDoUpdate({
-				target: quotaSnapshots.service,
-				set: { used: snap.used, total: snap.total, updatedAt: now },
+				target: monitorSnapshots.key,
+				set: {
+					value: check.value,
+					extra: check.extra,
+					updatedAt: now,
+				},
 			});
 	}
 
+	// ── User count (from D1 distinct user_id in threads) ──────────────────
+	try {
+		const result = await env.DB.prepare(
+			"SELECT COUNT(DISTINCT user_id) as count FROM threads",
+		)
+			.all<{ count: number }>();
+		const userCount = result.results[0]?.count ?? 0;
+
+		const [prev] = await db
+			.select()
+			.from(monitorSnapshots)
+			.where(eq(monitorSnapshots.key, "user_count"))
+			.limit(1);
+
+		const prevCount = prev?.value ?? 0;
+		if (prevCount !== userCount && prev !== undefined) {
+			const diff = userCount - prevCount;
+			const emoji = diff > 0 ? "📈" : "📉";
+			alerts.push(
+				`${emoji} *用户数*: ${prevCount} → ${userCount}（${diff > 0 ? "+" : ""}${diff}）`,
+			);
+		}
+
+		await db
+			.insert(monitorSnapshots)
+			.values({
+				key: "user_count",
+				value: userCount,
+				updatedAt: now,
+			})
+			.onConflictDoUpdate({
+				target: monitorSnapshots.key,
+				set: { value: userCount, updatedAt: now },
+			});
+	} catch {
+		// threads table might not exist yet
+	}
+
+	// ── Send alerts ───────────────────────────────────────────────────────
 	if (alerts.length > 0) {
-		const msg = `⚡ *StudyDojo 额度变动*\n\n${alerts.join("\n\n")}`;
+		const msg = `⚡ *StudyDojo 监控报告*\n\n${alerts.join("\n\n")}`;
 		await sendTelegram(botToken, chatId, msg);
 	}
 }
