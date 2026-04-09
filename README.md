@@ -13,6 +13,10 @@
   <a href="https://study-dojo.thebinwang.com/"><strong>👉 立即体验（完全免费，无需部署）</strong></a>
 </p>
 
+## 🎬 演示视频
+
+<https://github.com/user-attachments/assets/7485c513-3bbb-43cf-b804-a918084d1e0f>
+
 ---
 
 ## 📋 项目背景
